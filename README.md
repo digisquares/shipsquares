@@ -56,6 +56,27 @@ servers reached over **agentless SSH** (nothing to install on the targets). A **
 dashboard, an `ss` **CLI**, and an **MCP server** all talk to the same typed HTTP API, so
 humans and AI assistants operate the platform through one contract.
 
+## How it compares
+
+[Coolify](https://github.com/coollabsio/coolify) and [Dokploy](https://github.com/Dokploy/dokploy)
+are excellent, production-ready PaaS projects, and ShipSquares keeps parity on the basics
+(push-to-deploy, one-click catalog, backups, multi-server over SSH). Where it differs is an
+**AI-native, batteries-included core**:
+
+|                                                                                      |              ShipSquares               |     Coolify      |     Dokploy      |
+| ------------------------------------------------------------------------------------ | :------------------------------------: | :--------------: | :--------------: |
+| Built-in **AI assistant + MCP** — operate the platform via AI, with your permissions |                   ✅                   |        —         |        —         |
+| **Database Studio** — in-dashboard SQL browser & editor (Postgres + MySQL)           |                   ✅                   |        —         |        —         |
+| **Managed email** — mailboxes + automatic DNS (DKIM/SPF/DMARC) & verification        |                   ✅                   |        —         |        —         |
+| Automatic-HTTPS proxy                                                                | **Caddy** (zero-config, on-demand TLS) |     Traefik      |     Traefik      |
+| Control-plane datastore                                                              |  **PostgreSQL only** (pg-boss queue)   | Postgres + Redis | Postgres + Redis |
+| Process model                                                                        |  native systemd core (apps in Docker)  |      Docker      |      Docker      |
+| Push-to-deploy · catalog · backups · multi-server                                    |                   ✅                   |        ✅        |        ✅        |
+| License                                                                              |               Apache-2.0               |    Apache-2.0    |    Apache-2.0    |
+
+> ShipSquares is **beta**; Coolify and Dokploy are battle-tested today. If you need production
+> stability right now, use them — and check back as ShipSquares heads to 1.0.
+
 ## Built with
 
 ShipSquares stands on a deliberately small, battle-tested set of open-source libraries.
