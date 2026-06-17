@@ -1,0 +1,26 @@
+[Unit]
+Description=ShipSquares control plane
+After=network-online.target postgresql.service shipsquares-caddy.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=shipsquares
+Group=shipsquares
+EnvironmentFile=/etc/shipsquares/env
+EnvironmentFile=/etc/shipsquares/secrets.env
+WorkingDirectory=/opt/shipsquares/current
+ExecStart=/usr/bin/node /opt/shipsquares/current/dist/index.js
+Restart=on-failure
+RestartSec=3
+# hardening (19-security)
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/shipsquares
+AmbientCapabilities=
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,40 @@
+# Gates on every push/PR (20-testing-ci.md):
+# the same four local gates + the web build + an OpenAPI drift check.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Dummy config so loadConfig() validates for build-time emitters (no DB is
+      # contacted — postgres.js connects lazily).
+      DATABASE_URL: postgres://localhost:5432/shipsquares_ci
+      AUTH_SECRET: ci-dummy-secret-0123456789abcdef-xyz
+      AUTH_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4 # version from package.json "packageManager"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -s build
+      - run: pnpm -s typecheck
+      - run: pnpm -s test
+      - run: pnpm -s lint
+      - run: pnpm -F @ss/web build
+      # OpenAPI drift gate: the committed spec + generated client must match the
+      # routes (plan 20's openapi-check).
+      - run: pnpm -s openapi:gen
+      - run: git diff --exit-code apps/server/openapi.json packages/openapi-client/src/schema.d.ts

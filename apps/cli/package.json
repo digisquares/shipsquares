@@ -1,0 +1,12 @@
+{
+  "name": "@ss/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "ss": "./dist/main.js"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

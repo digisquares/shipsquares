@@ -1,0 +1,31 @@
+ShipSquares
+Copyright (c) 2026 Digisquares and the ShipSquares contributors.
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product includes code and artifacts adapted from the following open-source
+projects, per their licenses:
+
+- Dokploy (https://github.com/Dokploy/dokploy) — Apache License 2.0.
+  Adapted: monorepo/workspace shape; build-dispatch and webhook-provider logic
+  (TypeScript) ported into apps/server. Files under the project's `*/proprietary`
+  paths are NOT used (separately licensed).
+
+- Coolify (https://github.com/coollabsio/coolify) — Apache License 2.0.
+  Copied artifacts: compose template catalog and host install script (adapted
+  into the native installer). Application code (PHP) is referenced for concepts
+  only, not copied.
+
+- CapRover (https://github.com/caprover/caprover) — Apache License 2.0.
+  Referenced: language Dockerfile templates (concept).
+
+- Dockge (https://github.com/louislam/dockge) — MIT License.
+  Referenced: bounded log-buffer (LimitQueue) pattern.
+
+- Kamal (https://github.com/basecamp/kamal) — MIT License.
+  Referenced: secrets clear/secret split and accessory shape (concept).
+
+- Portainer (https://github.com/portainer/portainer) — zlib License.
+  Referenced: Docker socket-scheme detection (unix/npipe/ssh) pattern (concept).
+
+Each adapted/copied portion retains attribution in the relevant source file.

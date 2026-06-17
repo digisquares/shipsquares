@@ -1,0 +1,1 @@
+ALTER TYPE "public"."build_strategy" ADD VALUE 'buildpacks' BEFORE 'static';

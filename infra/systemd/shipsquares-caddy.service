@@ -1,0 +1,21 @@
+[Unit]
+Description=ShipSquares Caddy (edge proxy)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=caddy
+Group=caddy
+# admin bound to loopback in caddy.base.json (08-proxy-ssl); :80/:443 needs the cap
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+Environment=XDG_DATA_HOME=/var/lib/caddy
+Environment=XDG_CONFIG_HOME=/var/lib/caddy
+ExecStart=/usr/local/bin/caddy run --resume --config /etc/shipsquares/caddy.base.json
+ExecReload=/usr/local/bin/caddy reload --config /etc/shipsquares/caddy.base.json
+Restart=on-failure
+RestartSec=3
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target

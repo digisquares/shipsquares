@@ -1,0 +1,17 @@
+# Enforce the repo's LF convention (matches .editorconfig: end_of_line = lf) on
+# every platform. Without this, core.autocrlf=true injects CRLF on Windows
+# checkouts, which breaks the shell/python scripts that run on Linux
+# (infra/installer/*.sh, ops/vm-tests/*.sh, ops/ssh/*.py).
+* text=auto eol=lf
+
+# Binary files git must never normalize.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.tgz binary
+*.gz binary

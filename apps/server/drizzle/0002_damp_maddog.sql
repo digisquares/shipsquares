@@ -1,0 +1,1 @@
+ALTER TABLE "vcs_connections" ADD COLUMN "token_expires_at" timestamp with time zone;

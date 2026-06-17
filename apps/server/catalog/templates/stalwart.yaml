@@ -1,0 +1,51 @@
+# documentation: https://stalw.art/docs/get-started
+# slogan: Secure, all-in-one mail & collaboration server (SMTP, IMAP, JMAP, CalDAV).
+# category: email
+# tags: mail,email,smtp,imap,jmap,stalwart,collaboration
+# logo: svgs/stalwart.png
+# port: 8888
+
+# Managed Email (R9 · docs/mail). One-click Stalwart (AGPL, run unmodified →
+# arm's-length, platform stays Apache-2.0) + SnappyMail webmail. ShipSquares
+# drives Stalwart's management API; the FALLBACK_ADMIN_SECRET is the first-boot
+# admin credential ShipSquares captures + seals. Mail TCP ports bind on the host
+# (Stalwart owns them); the webmail/JMAP HTTP surfaces go through the platform
+# proxy via the SERVICE_FQDN_* tokens. Image tag is pinned (version-pin task).
+services:
+  stalwart:
+    image: 'stalwartlabs/stalwart:v0.11.5'
+    restart: unless-stopped
+    ports:
+      - '25:25'
+      - '465:465'
+      - '587:587'
+      - '143:143'
+      - '993:993'
+      - '110:110'
+      - '995:995'
+      - '4190:4190'
+    environment:
+      - SERVICE_FQDN_STALWART_443
+      - FALLBACK_ADMIN_USER=admin
+      - FALLBACK_ADMIN_SECRET=$SERVICE_PASSWORD_64_ADMIN
+    volumes:
+      - 'stalwart-data:/opt/stalwart'
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/8080' || exit 1"]
+      interval: 10s
+      timeout: 20s
+      retries: 10
+  webmail:
+    image: 'djmaze/snappymail:latest'
+    restart: unless-stopped
+    depends_on:
+      - stalwart
+    environment:
+      - SERVICE_FQDN_WEBMAIL_8888
+    volumes:
+      - 'snappymail-data:/var/lib/snappymail'
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/8888' || exit 1"]
+      interval: 10s
+      timeout: 20s
+      retries: 10

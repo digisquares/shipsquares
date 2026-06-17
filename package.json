@@ -1,0 +1,70 @@
+{
+  "name": "shipsquares",
+  "version": "0.1.0-beta.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "homepage": "https://shipsquares.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digisquares/shipsquares.git"
+  },
+  "bugs": {
+    "url": "https://github.com/digisquares/shipsquares/issues"
+  },
+  "packageManager": "pnpm@10.0.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm -F @ss/server dev",
+    "build": "tsc -b && pnpm -F @ss/web build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ai": "vitest run --config vitest.ai.config.ts",
+    "test:db": "vitest run --config vitest.db.config.ts",
+    "clean": "rimraf --glob \"packages/*/dist\" \"apps/*/dist\" \"mcp/dist\" \"**/*.tsbuildinfo\"",
+    "db:generate": "pnpm -F @ss/server db:generate",
+    "db:migrate": "pnpm -F @ss/server db:migrate",
+    "db:push": "pnpm -F @ss/server db:push",
+    "db:studio": "pnpm -F @ss/server db:studio",
+    "db:seed": "pnpm -F @ss/server db:seed",
+    "openapi:gen": "pnpm -F @ss/server openapi:emit && pnpm -F @ss/openapi-client generate",
+    "postinstall": "simple-git-hooks || node -e \"\""
+  },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm lint-staged"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "node-pty",
+      "simple-git-hooks",
+      "unrs-resolver"
+    ]
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{js,mjs,json,yaml,yml,md}": "prettier --write"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "@types/node": "^22.10.5",
+    "eslint": "^9.18.0",
+    "eslint-plugin-import-x": "^4.6.1",
+    "lint-staged": "^15.3.0",
+    "prettier": "^3.4.2",
+    "rimraf": "^6.0.1",
+    "simple-git-hooks": "^2.11.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0",
+    "vitest": "^3.0.5"
+  }
+}

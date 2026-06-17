@@ -1,0 +1,1 @@
+ALTER TABLE "metric_alerts" ADD COLUMN "last_fired_at" timestamp with time zone;

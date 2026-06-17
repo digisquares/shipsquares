@@ -1,0 +1,12 @@
+node_modules/
+**/dist/
+pnpm-lock.yaml
+prototype/
+ops/
+docs/
+*.tsbuildinfo
+apps/server/catalog/
+
+# generated API artifacts — must stay byte-identical to openapi:gen output (CI drift gate)
+apps/server/openapi.json
+packages/openapi-client/src/schema.d.ts

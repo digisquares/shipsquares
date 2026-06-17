@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📚 Documentation
+    url: https://shipsquares.com/docs
+    about: Installation and usage guides.
+  - name: 💬 Discussions
+    url: https://github.com/digisquares/shipsquares/discussions
+    about: Ask questions and share ideas.
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/digisquares/shipsquares/security/advisories/new
+    about: Please report security issues privately — see SECURITY.md.

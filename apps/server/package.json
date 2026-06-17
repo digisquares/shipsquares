@@ -1,0 +1,59 @@
+{
+  "name": "@ss/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --conditions=ss-source src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "openapi:emit": "tsx --conditions=ss-source src/openapi-emit.ts",
+    "db:generate": "tsc -b && drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "migrate": "node dist/db/migrate.js",
+    "db:push": "tsc -b && drizzle-kit push",
+    "db:studio": "tsc -b && drizzle-kit studio",
+    "db:seed": "tsx --conditions=ss-source src/db/seed.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.1",
+    "@fastify/cors": "^10.0.2",
+    "@fastify/helmet": "^13.0.1",
+    "@fastify/rate-limit": "^10.2.2",
+    "@fastify/sensible": "^6.0.3",
+    "@fastify/static": "^8.0.4",
+    "@fastify/swagger": "^9.4.2",
+    "@fastify/type-provider-typebox": "^5.1.0",
+    "@fastify/websocket": "^11.0.2",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@octokit/auth-app": "^8.2.0",
+    "@scalar/fastify-api-reference": "^1.25.122",
+    "@sinclair/typebox": "^0.34.14",
+    "@ss/shared": "workspace:*",
+    "better-auth": "^1.2.0",
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.45.2",
+    "fastify": "^5.2.1",
+    "fastify-plugin": "^5.0.1",
+    "micromatch": "^4.0.8",
+    "mysql2": "^3.22.5",
+    "nodemailer": "^8.0.10",
+    "octokit": "^5.0.5",
+    "pg-boss": "^10.1.5",
+    "postgres": "^3.4.5",
+    "ssh2": "^1.17.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.2",
+    "@types/micromatch": "^4.0.9",
+    "@types/nodemailer": "^8.0.0",
+    "@types/ssh2": "^1.15.5",
+    "drizzle-kit": "^0.31.4",
+    "tsx": "^4.19.2"
+  },
+  "optionalDependencies": {
+    "node-pty": "^1.1.0"
+  }
+}

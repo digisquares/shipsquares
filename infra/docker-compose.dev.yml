@@ -1,0 +1,23 @@
+# Dev-only: control Postgres for contributors who don't run it natively.
+# Production runs Postgres + the control plane native (systemd). See
+# docs/plan/18-installer-ops.md. The control plane itself is NEVER run from this
+# file — always `pnpm dev` — so dev mirrors prod.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: shipsquares_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - ss_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d shipsquares_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  ss_pgdata: {}

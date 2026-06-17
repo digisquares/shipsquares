@@ -1,0 +1,25 @@
+{
+  "name": "@ss/openapi-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "ss-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "generate": "openapi-typescript ../../apps/server/openapi.json -o ./src/schema.d.ts"
+  },
+  "dependencies": {
+    "@ss/shared": "workspace:*",
+    "openapi-fetch": "^0.13.4"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.5.0"
+  }
+}

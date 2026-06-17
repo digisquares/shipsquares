@@ -1,0 +1,27 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+*.tsbuildinfo
+
+# python (ops/ssh helpers)
+__pycache__/
+*.pyc
+
+# env / secrets (never commit; see 02-foundations.md)
+.env
+.env.*
+!.env.example
+
+# test / coverage
+coverage/
+
+# misc
+.DS_Store
+*.log
+
+# release bundle artifacts (scripts/build-bundle.sh) + ad-hoc ops transfers
+dist-bundle/
+shipsquares-control-plane-*.tgz
+ss-*.tgz

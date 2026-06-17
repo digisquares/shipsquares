@@ -1,0 +1,1 @@
+ALTER TABLE "metric_samples" ADD COLUMN "disk_total_bytes" bigint;

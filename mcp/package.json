@@ -1,0 +1,17 @@
+{
+  "name": "@ss/mcp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "shipsquares-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@ss/openapi-client": "workspace:*",
+    "@ss/shared": "workspace:*"
+  }
+}

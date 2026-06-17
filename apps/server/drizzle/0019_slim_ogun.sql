@@ -1,0 +1,2 @@
+ALTER TABLE "vcs_connections" ADD COLUMN "app_registration_id" text;--> statement-breakpoint
+ALTER TABLE "vcs_connections" ADD CONSTRAINT "vcs_connections_app_registration_id_vcs_app_registrations_id_fk" FOREIGN KEY ("app_registration_id") REFERENCES "public"."vcs_app_registrations"("id") ON DELETE cascade ON UPDATE no action;
