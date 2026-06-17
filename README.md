@@ -67,7 +67,7 @@ are excellent, production-ready PaaS projects, and ShipSquares keeps parity on t
 | ------------------------------------------------------------------------------------ | :------------------------------------: | :--------------: | :--------------: |
 | Built-in **AI assistant + MCP** — operate the platform via AI, with your permissions |                   ✅                   |        —         |        —         |
 | **Database Studio** — in-dashboard SQL browser & editor (Postgres + MySQL)           |                   ✅                   |        —         |        —         |
-| **Managed email** — mailboxes + automatic DNS (DKIM/SPF/DMARC) & verification        |                   ✅                   |        —         |        —         |
+| **Managed email** — host mailboxes + DKIM/SPF/DMARC records generated & verified     |                   ✅                   |        —         |        —         |
 | Automatic-HTTPS proxy                                                                | **Caddy** (zero-config, on-demand TLS) |     Traefik      |     Traefik      |
 | Control-plane datastore                                                              |  **PostgreSQL only** (pg-boss queue)   | Postgres + Redis | Postgres + Redis |
 | Process model                                                                        |  native systemd core (apps in Docker)  |      Docker      |      Docker      |
