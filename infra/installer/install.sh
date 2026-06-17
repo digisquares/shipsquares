@@ -16,7 +16,9 @@ set -euo pipefail
 # NB: never export a bare VERSION — get.docker.com reads $VERSION as the Docker
 # version to install. Namespaced SS_VERSION avoids that (and similar) collisions.
 SS_VERSION="${SS_VERSION:-latest}"
-BUNDLE_SRC="${SS_BUNDLE:-https://get.shipsquares.com/bundles/${SS_VERSION}.tgz}"
+# Bundles are arch-specific (vendored node-pty addon); the URL carries the arch.
+case "$(uname -m)" in x86_64) _SS_ARCH=amd64 ;; aarch64|arm64) _SS_ARCH=arm64 ;; *) _SS_ARCH=amd64 ;; esac
+BUNDLE_SRC="${SS_BUNDLE:-https://get.shipsquares.com/bundles/${SS_VERSION}-${_SS_ARCH}.tgz}"
 PUBLIC_DOMAIN="${SS_DOMAIN:-}"
 ADMIN_EMAIL="${SS_ADMIN_EMAIL:-}"
 ADMIN_PASSWORD="${SS_ADMIN_PASSWORD:-}"

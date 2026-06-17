@@ -5,6 +5,7 @@ import { Onboarding } from "../components/onboarding";
 import { RepoPicker } from "../components/repo-picker";
 import { SkeletonRows } from "../components/skeleton";
 import { StatusPill } from "../components/status-pill";
+import { UpdateBadge } from "../components/updates";
 import { UserMenu } from "../components/user-menu";
 import { api } from "../lib/api";
 import { confirm } from "../lib/confirm";
@@ -214,6 +215,7 @@ export function Dashboard() {
           <a className="btn btn-ghost btn-sm" href="#/catalog">
             Catalog
           </a>
+          <UpdateBadge />
           <UserMenu />
         </div>
       </header>

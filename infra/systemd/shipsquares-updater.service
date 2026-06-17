@@ -1,0 +1,10 @@
+[Unit]
+Description=ShipSquares self-updater (download, migrate, swap, restart, roll back)
+# Triggered by shipsquares-updater.path. Runs as root, outside the control-plane
+# process, so it can swap /opt/shipsquares/current and restart the service.
+
+[Service]
+Type=oneshot
+ExecStart=/opt/shipsquares/bin/update.sh
+# No sandboxing here on purpose: the updater must write /opt/shipsquares and drive
+# systemctl. It is a small, audited script triggered only by a control-plane file write.

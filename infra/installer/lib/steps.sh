@@ -113,9 +113,19 @@ step_units() {
   install -m 0644 "$here/systemd/shipsquares.service"       /etc/systemd/system/
   install -m 0644 "$here/systemd/shipsquares-caddy.service" /etc/systemd/system/
   [ -f "$ETC/caddy.base.json" ] || install -m 0644 -o caddy "$here/caddy/caddy.base.json" "$ETC/caddy.base.json"
+  # Self-updater (auto-update.md): a root oneshot triggered by a .path watch on the
+  # control plane's update.request. The script lives outside `current` (it swaps it).
+  install -d -o shipsquares -g shipsquares "$PREFIX/bin"
+  install -m 0755 "$here/updater/update.sh"                  "$PREFIX/bin/update.sh"
+  install -m 0644 "$here/systemd/shipsquares-updater.service" /etc/systemd/system/
+  install -m 0644 "$here/systemd/shipsquares-updater.path"    /etc/systemd/system/
+  # Manifest-signing public key (auto-update.md Phase 3): present only once signing
+  # is provisioned; the updater verifies the release manifest against it when found.
+  [ -f "$here/updater/manifest-sign.pub" ] && install -m 0644 "$here/updater/manifest-sign.pub" "$PREFIX/manifest-sign.pub"
   ln -sfn "$PREFIX/$SS_VERSION" "$PREFIX/current"
   systemctl daemon-reload
   systemctl enable --now shipsquares-caddy
+  systemctl enable --now shipsquares-updater.path
 }
 
 # 8b ── host firewall (a PaaS must expose 80/443; cloud SG is the operator's job)

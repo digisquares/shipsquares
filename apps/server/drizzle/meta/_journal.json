@@ -169,6 +169,20 @@
       "when": 1781590877165,
       "tag": "0023_pretty_venom",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1781712308264,
+      "tag": "0024_harsh_peter_quill",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1781719708109,
+      "tag": "0025_demonic_spyke",
+      "breakpoints": true
     }
   ]
 }

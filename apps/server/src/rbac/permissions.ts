@@ -35,6 +35,10 @@ export const PERMISSIONS = [
   "mail:read",
   "mail:write",
   "mail:admin",
+  // Update notifications (auto-update.md): read the current/latest version state
+  // (any member), and trigger an on-demand re-check / future apply (owner/admin).
+  "update:read",
+  "update:write",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

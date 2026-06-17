@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CopyButton } from "../components/copy-button";
 import { EmptyState } from "../components/empty-state";
 import { SkeletonRows } from "../components/skeleton";
+import { UpdatesCard } from "../components/updates";
 import { UserMenu } from "../components/user-menu";
 import { api } from "../lib/api";
 import { twoFactor, useSession } from "../lib/auth";
@@ -55,6 +56,7 @@ export function Settings() {
         <ApiKeysCard />
         <TwoFactorCard />
         <AiSettingsCard />
+        <UpdatesCard />
       </main>
     </div>
   );

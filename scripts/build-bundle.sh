@@ -60,7 +60,12 @@ if [ -n "$SRC_PTY_BUILD" ] && [ -n "$DST_PTY" ] && [ -d "$DST_PTY" ]; then
   test -f "$DST_PTY/build/Release/pty.node" || { echo "node-pty addon missing after copy"; exit 1; }
 fi
 
+# Stamp the version so the running control plane knows what it is (auto-update.md);
+# the server reads ./VERSION from its working dir (/opt/shipsquares/current).
+printf '%s\n' "$VERSION" > "$OUT/VERSION"
+
 # Sanity: the bundle must be self-contained and migration-capable.
+test -s "$OUT/VERSION"                                || { echo "missing VERSION"; exit 1; }
 test -f "$OUT/dist/index.js"                         || { echo "missing dist/index.js"; exit 1; }
 test -f "$OUT/dist/db/migrate.js"                     || { echo "missing dist/db/migrate.js"; exit 1; }
 test -f "$OUT/node_modules/@ss/shared/dist/index.js"  || { echo "@ss/shared not vendored"; exit 1; }

@@ -68,6 +68,22 @@ export const EnvSchema = z.object({
   // Optional bearer token for the /metrics endpoint (R6.4). If set, Prometheus
   // scrapes must include `Authorization: Bearer <token>`. Unset = unauthenticated.
   METRICS_TOKEN: z.string().optional(),
+  // Update notification (auto-update.md). SS_VERSION is an optional override for
+  // the running version; the authoritative source is the bundle's VERSION file
+  // (read from the working directory). Release channel + manifest base point the
+  // update-check cron at get.shipsquares.com/channels/<channel>.json. Set
+  // SS_UPDATE_CHECK=false to disable the check entirely (air-gapped installs).
+  SS_VERSION: z.string().default("dev"),
+  SS_RELEASE_CHANNEL: z.enum(["stable", "beta", "canary"]).default("stable"),
+  SS_UPDATE_MANIFEST_BASE: z.string().url().default("https://get.shipsquares.com/channels"),
+  SS_UPDATE_CHECK: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
+  // State dir shared with the root self-updater (auto-update.md · Phase 2): the
+  // control plane writes <dir>/update.request and reads <dir>/update.status; the
+  // shipsquares-updater.path unit watches the request file.
+  SS_STATE_DIR: z.string().default("/var/lib/shipsquares"),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

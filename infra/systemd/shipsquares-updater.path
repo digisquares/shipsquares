@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch for a ShipSquares self-update request
+
+[Path]
+# The control plane drops this file (POST /system/updates/apply); arrival starts
+# the updater. The updater consumes the file, which re-arms this watch.
+PathExists=/var/lib/shipsquares/update.request
+
+[Install]
+WantedBy=multi-user.target

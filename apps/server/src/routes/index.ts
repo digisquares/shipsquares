@@ -24,6 +24,7 @@ import { registryCredentialsRoutes } from "./registry-credentials.js";
 import { replicasRoutes } from "./replicas.js";
 import { schedulesRoutes } from "./schedules.js";
 import { serversRoutes } from "./servers.js";
+import { systemRoutes } from "./system.js";
 import { webhookRoutes } from "./webhook.js";
 
 // All v1 resource plugins, registered under the /api/v1 prefix by buildApp.
@@ -54,4 +55,5 @@ export const v1Routes: FastifyPluginAsyncTypebox = async (app) => {
   await app.register(metricAlertsRoutes);
   await app.register(catalogServicesRoutes);
   await app.register(chatRoutes);
+  await app.register(systemRoutes);
 };

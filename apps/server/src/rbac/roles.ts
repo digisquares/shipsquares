@@ -34,6 +34,8 @@ export const ROLE_MATRIX: Record<Role, ReadonlySet<Permission>> = {
     // admin (mail:admin is owner/admin only — same trust as dbstudio:connect).
     "mail:read",
     "mail:write",
+    // See update-availability (triggering a re-check stays owner/admin).
+    "update:read",
   ]),
   viewer: new Set<Permission>(ALL.filter((p) => p.endsWith(":read") && p !== "secret:read")),
 };

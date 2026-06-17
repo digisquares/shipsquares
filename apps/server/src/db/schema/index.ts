@@ -27,4 +27,5 @@ export * from "./invites.js";
 export * from "./webhooks.js";
 export * from "./audit-log.js";
 export * from "./mail.js";
+export * from "./update-state.js";
 export * from "./relations.js";

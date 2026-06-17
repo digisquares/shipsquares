@@ -140,6 +140,16 @@ try {
   console.warn(`mail-dns-verify registration skipped: ${(err as Error).message}`);
 }
 
+// Update check (auto-update.md): every 6h, fetch the release manifest and upsert
+// the update_state singleton the dashboard reads for the notify badge. Non-fatal.
+try {
+  const { bootUpdateCheck } = await import("./services/update-check.service.js");
+  await bootUpdateCheck(app.db, config, app.queue);
+  console.log("update-check cron registered (0 */6)");
+} catch (err) {
+  console.warn(`update-check registration skipped: ${(err as Error).message}`);
+}
+
 // Metrics collector (ROADMAP R1): 60s host+container sampling into
 // metric_samples, retention trim, threshold-alert evaluation. Non-fatal.
 try {
