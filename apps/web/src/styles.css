@@ -1528,6 +1528,87 @@ summary:focus-visible,
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+/* Structured-input form the assistant requests mid-turn (elicitation). */
+.chat-input-request {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+.chat-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+}
+.chat-field > span {
+  color: var(--text-muted);
+}
+.chat-field input[type="text"],
+.chat-field input[type="number"],
+.chat-field select {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+.chat-field input[type="checkbox"] {
+  align-self: flex-start;
+}
+/* Approvable multi-step plan (Phase C). */
+.chat-plan {
+  width: 100%;
+}
+.chat-plan-steps {
+  margin: 6px 0 8px;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+.chat-plan-steps code {
+  font-size: 11px;
+}
+/* Suggested starter prompts (empty state). */
+.chat-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+.chat-suggestion {
+  text-align: left;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.chat-suggestion:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+/* "What I did" recap under an assistant turn. */
+.chat-did {
+  margin-top: 4px;
+  font-size: 12px;
+}
+.chat-did-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.chat-did ul {
+  margin: 2px 0 0;
+  padding-left: 16px;
+}
 
 /* Shared small-form helpers (settings cards) */
 .form-row {

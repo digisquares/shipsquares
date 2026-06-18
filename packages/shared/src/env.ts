@@ -84,6 +84,10 @@ export const EnvSchema = z.object({
   // control plane writes <dir>/update.request and reads <dir>/update.status; the
   // shipsquares-updater.path unit watches the request file.
   SS_STATE_DIR: z.string().default("/var/lib/shipsquares"),
+  // Dynamic tool selection for the assistant (ai-assistant-roadmap.md): a Haiku
+  // sub-agent narrows the tool catalog to the user's intent. "auto" engages it once
+  // the catalog exceeds a threshold; "on" always; "off" never (send the full set).
+  SS_CHAT_TOOL_PICKER: z.enum(["auto", "on", "off"]).default("auto"),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

@@ -7,6 +7,7 @@ export interface AiSettingsRow {
   enabled: boolean;
   model: string;
   apiKeySecretRef: string | null;
+  thinking: boolean;
 }
 
 export interface ResolvedAi {
@@ -14,17 +15,20 @@ export interface ResolvedAi {
   model: string;
   keySource: "org" | "platform" | "none";
   keyRef: string | null;
+  thinking: boolean;
 }
 
 const DEFAULT_MODEL = "claude-sonnet-4-6";
 
 export function resolveAi(org: AiSettingsRow | null, platformKeyRef: string | null): ResolvedAi {
+  const thinking = org?.thinking ?? false;
   if (org?.enabled && org.apiKeySecretRef) {
     return {
       enabled: true,
       model: org.model || DEFAULT_MODEL,
       keySource: "org",
       keyRef: org.apiKeySecretRef,
+      thinking,
     };
   }
   if (platformKeyRef) {
@@ -33,9 +37,16 @@ export function resolveAi(org: AiSettingsRow | null, platformKeyRef: string | nu
       model: org?.model || DEFAULT_MODEL,
       keySource: "platform",
       keyRef: platformKeyRef,
+      thinking,
     };
   }
-  return { enabled: false, model: org?.model || DEFAULT_MODEL, keySource: "none", keyRef: null };
+  return {
+    enabled: false,
+    model: org?.model || DEFAULT_MODEL,
+    keySource: "none",
+    keyRef: null,
+    thinking,
+  };
 }
 
 /** Display hint for a configured key — never the plaintext value. */

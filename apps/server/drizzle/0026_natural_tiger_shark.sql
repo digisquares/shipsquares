@@ -1,0 +1,1 @@
+ALTER TABLE "ai_settings" ADD COLUMN "thinking" boolean DEFAULT false NOT NULL;

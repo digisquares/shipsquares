@@ -8722,6 +8722,7 @@ export interface paths {
                     "application/json": {
                         conversationId?: string;
                         message: string;
+                        context?: string;
                     };
                 };
             };
@@ -8783,6 +8784,96 @@ export interface paths {
                                 path: string;
                                 message: string;
                             }[];
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/chat/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        id: string;
+                        approve: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            ok: boolean;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/chat/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        id: string;
+                        answers?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            ok: boolean;
                         };
                     };
                 };
@@ -8936,6 +9027,7 @@ export interface paths {
                             keySource: "org" | "platform" | "none";
                             keyHint: string | null;
                             model: string;
+                            thinking: boolean;
                         };
                     };
                 };
@@ -8954,6 +9046,7 @@ export interface paths {
                         apiKey?: string;
                         model?: string;
                         enabled?: boolean;
+                        thinking?: boolean;
                     };
                 };
             };
@@ -8970,6 +9063,7 @@ export interface paths {
                             keySource: "org" | "platform" | "none";
                             keyHint: string | null;
                             model: string;
+                            thinking: boolean;
                         };
                     };
                 };

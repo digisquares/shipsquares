@@ -19474,6 +19474,10 @@
                     "minLength": 1,
                     "maxLength": 8192,
                     "type": "string"
+                  },
+                  "context": {
+                    "maxLength": 500,
+                    "type": "string"
                   }
                 }
               }
@@ -19632,6 +19636,106 @@
                           }
                         }
                       }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/approve": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "id",
+                  "approve"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "approve": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/answer": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "id"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "answers": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
                     }
                   }
                 }
@@ -19873,7 +19977,8 @@
                     "configured",
                     "keySource",
                     "keyHint",
-                    "model"
+                    "model",
+                    "thinking"
                   ],
                   "properties": {
                     "enabled": {
@@ -19916,6 +20021,9 @@
                     },
                     "model": {
                       "type": "string"
+                    },
+                    "thinking": {
+                      "type": "boolean"
                     }
                   }
                 }
@@ -19948,6 +20056,9 @@
                   },
                   "enabled": {
                     "type": "boolean"
+                  },
+                  "thinking": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -19966,7 +20077,8 @@
                     "configured",
                     "keySource",
                     "keyHint",
-                    "model"
+                    "model",
+                    "thinking"
                   ],
                   "properties": {
                     "enabled": {
@@ -20009,6 +20121,9 @@
                     },
                     "model": {
                       "type": "string"
+                    },
+                    "thinking": {
+                      "type": "boolean"
                     }
                   }
                 }

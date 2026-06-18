@@ -36,6 +36,9 @@ export const aiSettings = pgTable(
     model: text("model").notNull().default("claude-sonnet-4-6"),
     apiKeySecretRef: text("api_key_secret_ref"),
     enabled: boolean("enabled").notNull().default(false),
+    // Opt-in extended thinking (auto-update.md sibling: 22-chatbot-agent.md). Off by
+    // default — adds reasoning quality on complex tool-use at extra latency/cost.
+    thinking: boolean("thinking").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({ orgUq: uniqueIndex("ai_settings_org_uq").on(t.organizationId) }),

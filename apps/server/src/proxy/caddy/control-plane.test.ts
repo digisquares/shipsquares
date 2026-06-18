@@ -21,6 +21,7 @@ const env: Env = {
   SS_UPDATE_MANIFEST_BASE: "https://get.shipsquares.com/channels",
   SS_UPDATE_CHECK: true,
   SS_STATE_DIR: "/var/lib/shipsquares",
+  SS_CHAT_TOOL_PICKER: "auto",
 };
 
 describe("controlPlaneDesired", () => {

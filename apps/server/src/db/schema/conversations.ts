@@ -1,4 +1,4 @@
-import { index, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 import { users } from "./auth.js";
 import { messageRole } from "./enums.js";
@@ -39,4 +39,23 @@ export const messages = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({ convIdx: index("messages_conv_idx").on(t.conversationId, t.ordinal) }),
+);
+
+// Per-org assistant memory (ai-assistant-roadmap.md): durable facts/preferences the
+// user asks the assistant to remember ("my prod app is api", naming conventions),
+// keyed for upsert and auto-injected into the system prompt each turn. Org-scoped;
+// capped in the service so the injected block stays small.
+export const aiMemories = pgTable(
+  "ai_memories",
+  {
+    id: text("id").primaryKey(), // mem_…
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ orgKeyUq: uniqueIndex("ai_memories_org_key_uq").on(t.organizationId, t.key) }),
 );

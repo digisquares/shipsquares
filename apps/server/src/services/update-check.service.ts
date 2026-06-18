@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { AppError, type Env } from "@ss/shared";
@@ -265,7 +265,6 @@ export async function applyUpdate(db: Db, config: Env): Promise<ApplyResult> {
   const dest = join(config.SS_STATE_DIR, "update.request");
   const tmp = `${dest}.tmp`;
   await writeFile(tmp, `${JSON.stringify(request)}\n`, { mode: 0o600 });
-  const { rename } = await import("node:fs/promises");
   await rename(tmp, dest);
   return { accepted: true, fromVersion: current, toVersion: m.latest };
 }
@@ -275,8 +274,12 @@ export async function getUpdateProgress(config: Env): Promise<UpdateProgress> {
   try {
     const raw = await readFile(join(config.SS_STATE_DIR, "update.status"), "utf8");
     const p = JSON.parse(raw) as Partial<UpdateProgress>;
+    // Clamp state to the known set — a corrupted status file must not 500 the
+    // endpoint the UI polls every 2s mid-update (it's validated against the schema).
+    const states = ["idle", "running", "done", "failed"] as const;
+    const state = states.includes(p.state as (typeof states)[number]) ? p.state! : "running";
     return {
-      state: p.state ?? "idle",
+      state,
       step: p.step ?? null,
       fromVersion: p.fromVersion ?? null,
       toVersion: p.toVersion ?? null,

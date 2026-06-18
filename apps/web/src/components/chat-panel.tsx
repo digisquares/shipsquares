@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { type AssistantToolEvent, toolSummary } from "../lib/assistant";
+import {
+  type AssistantToolEvent,
+  actionSummary,
+  routeContext,
+  suggestedPrompts,
+  toolSummary,
+} from "../lib/assistant";
+import { useRoute } from "../lib/router";
 import { createSseParser } from "../lib/sse";
 
 // The in-product assistant (22): a right-side panel over POST /chat. Opens
@@ -22,6 +29,177 @@ interface ChatResult {
   toolEvents: AssistantToolEvent[];
 }
 
+interface ApprovalReq {
+  id: string;
+  tool: string;
+  input: Record<string, unknown>;
+  risk: string;
+}
+
+// Structured elicitation (ai-multistep-conversations.md Phase B): the assistant
+// asks for missing details via a small form instead of guessing.
+interface InputField {
+  key: string;
+  label: string;
+  type: "string" | "integer" | "number" | "boolean" | "enum";
+  options?: { value: string; label: string }[];
+  default?: string | number | boolean;
+  required?: boolean;
+  placeholder?: string;
+}
+interface InputReq {
+  id: string;
+  reason: string;
+  fields: InputField[];
+}
+
+/** The form the assistant requested. Owns its field state so the parent panel
+ *  stays simple; submits typed answers (or cancels) back to /chat/answer. */
+function InputRequestCard({
+  req,
+  onSubmit,
+  onCancel,
+}: {
+  req: InputReq;
+  onSubmit: (answers: Record<string, unknown>) => void;
+  onCancel: () => void;
+}) {
+  const initial = (f: InputField): string => {
+    if (f.default !== undefined) return String(f.default);
+    if (f.type === "enum" && f.options?.length) return f.options[0]!.value;
+    if (f.type === "boolean") return "false";
+    return "";
+  };
+  const [values, setValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(req.fields.map((f) => [f.key, initial(f)])),
+  );
+  const setField = (key: string, v: string) => setValues((s) => ({ ...s, [key]: v }));
+  const isRequired = (f: InputField) => f.required !== false && f.type !== "boolean";
+  const missing = req.fields.some((f) => isRequired(f) && !(values[f.key] ?? "").trim());
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const answers: Record<string, unknown> = {};
+    for (const f of req.fields) {
+      const raw = values[f.key] ?? "";
+      if (f.type === "boolean") answers[f.key] = raw === "true";
+      else if (raw.trim() === "")
+        continue; // optional + empty → omit
+      else if (f.type === "integer") answers[f.key] = parseInt(raw, 10);
+      else if (f.type === "number") answers[f.key] = Number(raw);
+      else answers[f.key] = raw;
+    }
+    onSubmit(answers);
+  };
+
+  return (
+    <div className="chat-turn chat-assistant">
+      <form className="chat-bubble chat-input-request" onSubmit={submit}>
+        <p>{req.reason}</p>
+        {req.fields.map((f) => (
+          <label key={f.key} className="chat-field">
+            <span>
+              {f.label}
+              {isRequired(f) ? "" : " (optional)"}
+            </span>
+            {f.type === "enum" ? (
+              <select value={values[f.key] ?? ""} onChange={(e) => setField(f.key, e.target.value)}>
+                {f.options?.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            ) : f.type === "boolean" ? (
+              <input
+                type="checkbox"
+                checked={values[f.key] === "true"}
+                onChange={(e) => setField(f.key, e.target.checked ? "true" : "false")}
+              />
+            ) : (
+              <input
+                type={f.type === "integer" || f.type === "number" ? "number" : "text"}
+                value={values[f.key] ?? ""}
+                placeholder={f.placeholder ?? ""}
+                onChange={(e) => setField(f.key, e.target.value)}
+              />
+            )}
+          </label>
+        ))}
+        <div className="card-actions">
+          <button className="btn btn-primary btn-sm" type="submit" disabled={missing}>
+            Submit
+          </button>
+          <button className="btn btn-ghost btn-sm" type="button" onClick={onCancel}>
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// Plan-then-execute (ai-multistep-conversations.md Phase C): the assistant proposes
+// an ordered multi-step plan; the user approves it once, then it runs (write steps
+// without re-prompting, destructive steps still confirming).
+interface PlanStep {
+  n?: number;
+  description: string;
+  tool: string;
+  input?: Record<string, unknown>;
+}
+interface PlanReq {
+  id: string;
+  goal: string;
+  steps: PlanStep[];
+}
+
+/** The proposed plan, shown for approval; once approved it stays as a checklist
+ *  that ticks off steps as their tools run (matched by tool name). */
+function PlanCard({
+  plan,
+  approved,
+  doneTools,
+  onApprove,
+  onCancel,
+}: {
+  plan: PlanReq;
+  approved: boolean;
+  doneTools: Set<string>;
+  onApprove: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="chat-turn chat-assistant">
+      <div className="chat-bubble chat-plan">
+        <p>
+          <strong>Plan:</strong> {plan.goal}
+        </p>
+        <ol className="chat-plan-steps">
+          {plan.steps.map((s, i) => (
+            <li key={i}>
+              {approved && <span aria-hidden="true">{doneTools.has(s.tool) ? "✓ " : "○ "}</span>}
+              {s.description} <code className="mono muted">{s.tool}</code>
+            </li>
+          ))}
+        </ol>
+        {approved ? (
+          <p className="muted">Running…</p>
+        ) : (
+          <div className="card-actions">
+            <button className="btn btn-primary btn-sm" onClick={onApprove}>
+              Approve plan
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={onCancel}>
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function ChatPanel() {
   const [open, setOpen] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -29,10 +207,20 @@ export function ChatPanel() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [liveTools, setLiveTools] = useState<AssistantToolEvent[]>([]);
+  const [liveText, setLiveText] = useState("");
+  const [pendingApproval, setPendingApproval] = useState<ApprovalReq | null>(null);
+  const [pendingInput, setPendingInput] = useState<InputReq | null>(null);
+  const [pendingPlan, setPendingPlan] = useState<PlanReq | null>(null);
+  const [planApproved, setPlanApproved] = useState(false);
   const [notConfigured, setNotConfigured] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const busyRef = useRef(false);
+  // Track the current page so send() can pass it as context without re-creating
+  // the memoized callback on every navigation.
+  const route = useRoute();
+  const routeRef = useRef(route);
+  routeRef.current = route;
 
   const send = useCallback(
     async (message: string) => {
@@ -42,12 +230,18 @@ export function ChatPanel() {
       setBusy(true);
       setInput("");
       setLiveTools([]);
+      setLiveText("");
+      setPendingApproval(null);
+      setPendingInput(null);
+      setPendingPlan(null);
+      setPlanApproved(false);
       setTurns((t) => [...t, { role: "user", content: text }]);
 
       const fail = (content: string) => setTurns((t) => [...t, { role: "assistant", content }]);
       const finishTurn = (d: ChatResult) => {
         setConversationId(d.conversationId);
         setTurns((t) => [...t, { role: "assistant", content: d.text, toolEvents: d.toolEvents }]);
+        setLiveText(""); // the authoritative answer replaces the streamed preview
       };
 
       let res: Response;
@@ -59,7 +253,11 @@ export function ChatPanel() {
             "content-type": "application/json",
             accept: "text/event-stream",
           },
-          body: JSON.stringify({ ...(conversationId ? { conversationId } : {}), message: text }),
+          body: JSON.stringify({
+            ...(conversationId ? { conversationId } : {}),
+            message: text,
+            ...(routeContext(routeRef.current) ? { context: routeContext(routeRef.current)! } : {}),
+          }),
         });
       } catch {
         fail("I couldn't reach the server — check your connection and try again.");
@@ -80,6 +278,15 @@ export function ChatPanel() {
           for (const ev of parser.push(decoder.decode(value, { stream: true }))) {
             if (ev.event === "tool") {
               setLiveTools((p) => [...p, ev.data as AssistantToolEvent]);
+            } else if (ev.event === "delta") {
+              setLiveText((p) => p + ((ev.data as { text?: string }).text ?? ""));
+            } else if (ev.event === "approval") {
+              setPendingApproval(ev.data as ApprovalReq);
+            } else if (ev.event === "input_request") {
+              setPendingInput(ev.data as InputReq);
+            } else if (ev.event === "plan") {
+              setPendingPlan(ev.data as PlanReq);
+              setPlanApproved(false);
             } else if (ev.event === "done") {
               finalized = true;
               finishTurn(ev.data as ChatResult);
@@ -101,10 +308,63 @@ export function ChatPanel() {
       }
 
       setLiveTools([]);
+      setLiveText("");
+      setPendingApproval(null);
+      setPendingInput(null);
+      setPendingPlan(null);
+      setPlanApproved(false);
       busyRef.current = false;
       setBusy(false);
     },
     [conversationId],
+  );
+
+  // Approve/decline a proposed write/destructive action; the streaming turn is
+  // blocked server-side and resumes once we POST the decision.
+  const respondApproval = useCallback((approve: boolean) => {
+    setPendingApproval((p) => {
+      if (p)
+        void fetch("/api/v1/chat/approve", {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ id: p.id, approve }),
+        });
+      return null;
+    });
+  }, []);
+
+  // Submit (or cancel) the structured details the assistant asked for; the blocked
+  // turn resumes once we POST. Omitting `answers` cancels.
+  const respondInput = useCallback((answers: Record<string, unknown> | null) => {
+    setPendingInput((p) => {
+      if (p)
+        void fetch("/api/v1/chat/answer", {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ id: p.id, ...(answers ? { answers } : {}) }),
+        });
+      return null;
+    });
+  }, []);
+
+  // Approve/cancel a proposed plan (Phase C). A plan decision is just a boolean, so
+  // it reuses /chat/approve. On approve we keep the card as a live checklist; on
+  // cancel we dismiss it.
+  const respondPlan = useCallback(
+    (approve: boolean) => {
+      if (!pendingPlan) return;
+      void fetch("/api/v1/chat/approve", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: pendingPlan.id, approve }),
+      });
+      if (approve) setPlanApproved(true);
+      else setPendingPlan(null);
+    },
+    [pendingPlan],
   );
 
   // ⌘K hands off here: open the panel and ask the typed query right away.
@@ -171,10 +431,24 @@ export function ChatPanel() {
 
       <div className="chat-scroll" ref={scrollRef}>
         {turns.length === 0 && !notConfigured && (
-          <p className="muted chat-hint">
-            Ask about your apps, deployments, or logs — the assistant inspects real state and can
-            deploy, roll back, and change env for you.
-          </p>
+          <div className="chat-hint">
+            <p className="muted">
+              Ask about your apps, deployments, or logs — the assistant inspects real state and can
+              deploy, roll back, and change env for you.
+            </p>
+            <div className="chat-suggestions">
+              {suggestedPrompts(route).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  className="chat-suggestion"
+                  onClick={() => void send(p)}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
         {notConfigured && (
           <p className="chat-unconfigured">
@@ -182,23 +456,72 @@ export function ChatPanel() {
             <a href="#/settings">Settings → AI assistant</a>.
           </p>
         )}
-        {turns.map((t, i) => (
-          <div key={i} className={`chat-turn chat-${t.role}`}>
-            <div className="chat-bubble">{t.content}</div>
-            {t.toolEvents && toolSummary(t.toolEvents) && (
-              <div className="chat-tools muted mono">{toolSummary(t.toolEvents)}</div>
-            )}
-          </div>
-        ))}
+        {turns.map((t, i) => {
+          const actions = t.toolEvents ? actionSummary(t.toolEvents) : null;
+          return (
+            <div key={i} className={`chat-turn chat-${t.role}`}>
+              <div className="chat-bubble">{t.content}</div>
+              {actions && (
+                <div className="chat-did">
+                  <span className="chat-did-label muted">What I did</span>
+                  <ul>
+                    {actions.map((a, j) => (
+                      <li key={j}>{a.href ? <a href={a.href}>{a.label}</a> : a.label}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {t.toolEvents && toolSummary(t.toolEvents) && (
+                <div className="chat-tools muted mono">{toolSummary(t.toolEvents)}</div>
+              )}
+            </div>
+          );
+        })}
         {busy && (
           <div className="chat-turn chat-assistant" aria-live="polite">
-            <div className="chat-bubble chat-thinking">
-              {liveTools.length ? "working…" : "thinking…"}
+            <div className={`chat-bubble${liveText ? "" : " chat-thinking"}`}>
+              {liveText || (liveTools.length ? "working…" : "thinking…")}
             </div>
             {liveTools.length > 0 && (
               <div className="chat-tools muted mono">{toolSummary(liveTools)}…</div>
             )}
           </div>
+        )}
+        {pendingApproval && (
+          <div className="chat-turn chat-assistant">
+            <div className="chat-bubble chat-approval">
+              <p>
+                Approve this <strong>{pendingApproval.risk}</strong> action?
+              </p>
+              <p className="mono muted">
+                {pendingApproval.tool}({JSON.stringify(pendingApproval.input)})
+              </p>
+              <div className="card-actions">
+                <button className="btn btn-primary btn-sm" onClick={() => respondApproval(true)}>
+                  Approve
+                </button>
+                <button className="btn btn-ghost btn-sm" onClick={() => respondApproval(false)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {pendingInput && (
+          <InputRequestCard
+            req={pendingInput}
+            onSubmit={(answers) => respondInput(answers)}
+            onCancel={() => respondInput(null)}
+          />
+        )}
+        {pendingPlan && (
+          <PlanCard
+            plan={pendingPlan}
+            approved={planApproved}
+            doneTools={new Set(liveTools.map((e) => e.tool))}
+            onApprove={() => respondPlan(true)}
+            onCancel={() => respondPlan(false)}
+          />
         )}
       </div>
 

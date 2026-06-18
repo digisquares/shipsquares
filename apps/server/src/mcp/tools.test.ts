@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import { PERMISSIONS } from "../rbac/permissions.js";
 
-import { MCP_TOOLS, buildRestCall, findTool, toolPermission } from "./tools.js";
+import {
+  MCP_TOOLS,
+  TOOL_CATEGORIES,
+  buildRestCall,
+  findTool,
+  toolPermission,
+  toolRisk,
+  toolsForCategories,
+} from "./tools.js";
 
 describe("MCP tool catalog", () => {
   it("every tool maps to a real RBAC permission", () => {
@@ -41,6 +49,29 @@ describe("MCP tool catalog", () => {
     expect(toolPermission("add_mail_domain")).toBe("mail:write");
     expect(toolPermission("get_mail_dns")).toBe("mail:read");
     expect(toolPermission("create_mailbox")).toBe("mail:write");
+  });
+
+  it("derives risk tiers — GET reads auto-run, mutations gate on approval", () => {
+    expect(toolRisk(findTool("list_servers")!)).toBe("read");
+    expect(toolRisk(findTool("browse_table")!)).toBe("read");
+    expect(toolRisk(findTool("get_db_schema")!)).toBe("read");
+    expect(toolRisk(findTool("deploy_app")!)).toBe("write");
+    expect(toolRisk(findTool("set_env")!)).toBe("write");
+    expect(toolRisk(findTool("create_mailbox")!)).toBe("write");
+  });
+
+  it("categorizes every tool exactly once (picker drift guard)", () => {
+    const inCats = TOOL_CATEGORIES.flatMap((c) => c.tools);
+    expect(new Set(inCats).size).toBe(inCats.length); // no tool in two categories
+    expect([...inCats].sort()).toEqual(MCP_TOOLS.map((t) => t.name).sort()); // exhaustive
+  });
+
+  it("toolsForCategories returns the union of the named categories' tools", () => {
+    const names = toolsForCategories(["servers", "jobs"]).map((t) => t.name);
+    expect(names).toEqual(
+      expect.arrayContaining(["list_servers", "server_metrics", "list_schedules"]),
+    );
+    expect(names).not.toContain("deploy_app");
   });
 });
 

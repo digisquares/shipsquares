@@ -432,6 +432,7 @@ interface AiSettingsView {
   keySource: "org" | "platform" | "none";
   keyHint: string | null;
   model: string;
+  thinking: boolean;
 }
 
 function AiSettingsCard() {
@@ -481,6 +482,18 @@ function AiSettingsCard() {
     else toast.error(r.ok ? `Test failed: ${r.data.error}` : `Test failed (${r.status})`);
   }
 
+  async function saveThinking(thinking: boolean) {
+    const r = await api.put<AiSettingsView>("/api/v1/ai-settings", { thinking });
+    if (r.ok) {
+      setView(r.data);
+      toast.success(`Extended thinking ${thinking ? "on" : "off"}`);
+    } else {
+      toast.error(
+        r.status === 403 ? "Changing this needs an org admin" : `Save failed (${r.status})`,
+      );
+    }
+  }
+
   return (
     <section className="card">
       <div className="card-head">
@@ -520,6 +533,17 @@ function AiSettingsCard() {
           />
         </label>
       </div>
+      <label className="field">
+        <span>
+          <input
+            type="checkbox"
+            checked={view?.thinking ?? false}
+            disabled={!view?.configured}
+            onChange={(e) => void saveThinking(e.target.checked)}
+          />{" "}
+          Extended thinking — deeper reasoning on complex requests (slower, higher token cost)
+        </span>
+      </label>
       <div className="card-actions">
         <button
           className="btn btn-primary btn-sm"

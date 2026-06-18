@@ -40,6 +40,7 @@ export const ID_PREFIXES = {
   aiSettings: "ai",
   conversation: "conv",
   message: "msg",
+  aiMemory: "mem",
   metricAlert: "malert",
   invite: "inv",
   replica: "rpl",

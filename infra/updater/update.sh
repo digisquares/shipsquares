@@ -15,7 +15,8 @@ REQ="$DATA/update.request"
 STATUS="$DATA/update.status"
 LOCK="$DATA/update.lock"
 SVC=shipsquares
-READY_URL=http://localhost:3000/readyz
+PORT="$(grep -hs '^PORT=' /etc/shipsquares/env 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '[:space:]')"
+READY_URL="http://localhost:${PORT:-3000}/readyz"
 HEALTH_TRIES=60
 PUBKEY="$PREFIX/manifest-sign.pub" # Ed25519 public key (present iff signing is provisioned)
 case "$(uname -m)" in x86_64) ARCH=amd64 ;; aarch64 | arm64) ARCH=arm64 ;; *) ARCH=amd64 ;; esac
@@ -79,6 +80,12 @@ if [ -n "$MANIFEST_URL" ]; then
 fi
 
 [ -n "$VER" ] && [ -n "$URL" ] || fail parse "no bundle to install for $ARCH"
+
+# No-op if already on the target (guards against rm-ing the live `current` dir).
+if [ "$VER" = "$FROM" ]; then
+  status done done "already on $VER"
+  exit 0
+fi
 
 DEST="$PREFIX/$VER"
 TGZ="$DATA/bundle-$VER.tgz"

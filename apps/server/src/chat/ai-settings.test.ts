@@ -6,17 +6,25 @@ describe("resolveAi", () => {
   it("prefers an enabled org BYO key", () => {
     expect(
       resolveAi(
-        { enabled: true, model: "claude-opus-4-8", apiKeySecretRef: "sec_org" },
+        { enabled: true, model: "claude-opus-4-8", apiKeySecretRef: "sec_org", thinking: true },
         "sec_platform",
       ),
-    ).toEqual({ enabled: true, model: "claude-opus-4-8", keySource: "org", keyRef: "sec_org" });
+    ).toEqual({
+      enabled: true,
+      model: "claude-opus-4-8",
+      keySource: "org",
+      keyRef: "sec_org",
+      thinking: true, // opt-in thinking propagates from the org row
+    });
   });
 
   it("falls back to the platform key when the org has none or is disabled", () => {
     expect(resolveAi(null, "sec_platform").keySource).toBe("platform");
     expect(
-      resolveAi({ enabled: false, model: "m", apiKeySecretRef: "sec_org" }, "sec_platform")
-        .keySource,
+      resolveAi(
+        { enabled: false, model: "m", apiKeySecretRef: "sec_org", thinking: false },
+        "sec_platform",
+      ).keySource,
     ).toBe("platform");
   });
 
