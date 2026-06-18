@@ -3,6 +3,8 @@
 // flow is unit-tested without the Anthropic SDK. The chat service binds the
 // real client + the MCP tool catalog executed in-process (the /mcp pattern).
 
+import type { ChatUsage } from "@ss/shared";
+
 export interface LoopContentText {
   type: "text";
   text: string;
@@ -18,6 +20,8 @@ export type LoopContent = LoopContentText | LoopContentToolUse;
 export interface LoopResponse {
   content: LoopContent[];
   stop_reason: string | null;
+  /** Token usage for this model call (the adapter fills it; absent in tests). */
+  usage?: ChatUsage;
 }
 
 export interface LoopMessage {
@@ -61,12 +65,18 @@ export interface ChatLoopDeps {
    *  plan (its write steps then auto-run; destructive steps still confirm), false to
    *  cancel. Absent ⇒ the model proceeds conservatively, confirming each action. */
   requestPlan?: (plan: Record<string, unknown>) => Promise<boolean>;
+  /** Cooperative cancellation: checked before each model call. When it returns true
+   *  (e.g. the client disconnected / hit Stop), the loop stops and returns what it
+   *  has so far instead of running more model/tool calls. */
+  shouldAbort?: () => boolean;
 }
 
 export interface ChatLoopResult {
   text: string;
   toolEvents: ToolEvent[];
   turns: number;
+  /** Token usage summed across the turn's model calls. */
+  usage: ChatUsage;
 }
 
 /** Protocol name of the structured-input meta-tool (ai-multistep-conversations.md
@@ -153,15 +163,33 @@ export async function runToolLoop(
   // the turn budget so a multi-step plan isn't cut off mid-execution.
   const approvedWriteRuns = new Map<string, number>();
   let budget = maxTurns;
+  const usage: ChatUsage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+  };
+  const addUsage = (u?: ChatUsage) => {
+    if (!u) return;
+    usage.inputTokens += u.inputTokens;
+    usage.outputTokens += u.outputTokens;
+    usage.cacheReadTokens = (usage.cacheReadTokens ?? 0) + (u.cacheReadTokens ?? 0);
+    usage.cacheWriteTokens = (usage.cacheWriteTokens ?? 0) + (u.cacheWriteTokens ?? 0);
+  };
 
   for (let turn = 1; turn <= budget; turn += 1) {
+    // Cooperative cancellation: stop before another model call if the client left.
+    if (deps.shouldAbort?.()) {
+      return { text: lastText || "(stopped)", toolEvents, turns: turn - 1, usage };
+    }
     const res = await deps.createMessage(messages);
+    addUsage(res.usage);
     const textBlocks = res.content.filter((c): c is LoopContentText => c.type === "text");
     if (textBlocks.length) lastText = textBlocks.map((c) => c.text).join("\n");
     const toolUses = res.content.filter((c): c is LoopContentToolUse => c.type === "tool_use");
 
     if (res.stop_reason !== "tool_use" || toolUses.length === 0) {
-      return { text: lastText, toolEvents, turns: turn };
+      return { text: lastText, toolEvents, turns: turn, usage };
     }
 
     // Echo the assistant turn, run every requested tool, answer with results.
@@ -315,5 +343,6 @@ export async function runToolLoop(
     text: lastText || `(stopped after ${budget} tool turns without a final answer)`,
     toolEvents,
     turns: budget,
+    usage,
   };
 }

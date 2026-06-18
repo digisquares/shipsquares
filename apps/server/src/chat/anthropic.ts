@@ -78,6 +78,16 @@ export function buildAnthropicCreateMessage(
       const onText = config.onText;
       stream.on("text", (delta) => onText(delta));
     }
-    return (await stream.finalMessage()) as unknown as LoopResponse;
+    const final = await stream.finalMessage();
+    const u = final.usage;
+    return {
+      ...(final as unknown as LoopResponse),
+      usage: {
+        inputTokens: u.input_tokens,
+        outputTokens: u.output_tokens,
+        cacheReadTokens: u.cache_read_input_tokens ?? 0,
+        cacheWriteTokens: u.cache_creation_input_tokens ?? 0,
+      },
+    };
   };
 }

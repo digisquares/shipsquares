@@ -1,3 +1,4 @@
+import type { ChatUsage } from "@ss/shared";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -104,6 +105,39 @@ describe("runToolLoop", () => {
     expect(r.turns).toBe(3);
     expect(r.toolEvents).toHaveLength(3);
     expect(r.text).toContain("tool turns");
+  });
+
+  it("sums token usage across the turn's model calls", async () => {
+    const withUsage = (r: LoopResponse, u: ChatUsage): LoopResponse => ({ ...r, usage: u });
+    const createMessage = vi
+      .fn()
+      .mockResolvedValueOnce(
+        withUsage(toolUse("t1", "list_apps", {}), {
+          inputTokens: 100,
+          outputTokens: 20,
+          cacheReadTokens: 10,
+          cacheWriteTokens: 5,
+        }),
+      )
+      .mockResolvedValueOnce(withUsage(text("done"), { inputTokens: 150, outputTokens: 30 }));
+    const r = await runToolLoop({ createMessage, execTool: deps().execTool }, []);
+    expect(r.usage).toEqual({
+      inputTokens: 250,
+      outputTokens: 50,
+      cacheReadTokens: 10,
+      cacheWriteTokens: 5,
+    });
+  });
+
+  it("stops before the next model call when shouldAbort returns true", async () => {
+    const createMessage = vi
+      .fn()
+      .mockResolvedValueOnce(toolUse("t1", "list_apps", {}))
+      .mockResolvedValueOnce(text("should-not-reach"));
+    const shouldAbort = vi.fn().mockReturnValueOnce(false).mockReturnValue(true);
+    const r = await runToolLoop({ createMessage, execTool: deps().execTool, shouldAbort }, []);
+    expect(createMessage).toHaveBeenCalledTimes(1); // 2nd model call skipped after abort
+    expect(r.text).toContain("stopped");
   });
 
   it("emits each tool event as it completes, before the final answer", async () => {

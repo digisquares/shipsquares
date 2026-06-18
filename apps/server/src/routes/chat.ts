@@ -2,6 +2,13 @@ import { randomUUID } from "node:crypto";
 
 import type { FastifyPluginAsyncTypebox } from "@fastify/type-provider-typebox";
 import { Type as T } from "@sinclair/typebox";
+import type {
+  ChatInputRequestEvent,
+  ChatPlanEvent,
+  ChatStreamEvent,
+  ChatStreamEventName,
+  ChatToolRisk,
+} from "@ss/shared";
 
 import { getOrgId, type RequestContext } from "../lib/ctx.js";
 import { Problem } from "../schemas/common.js";
@@ -72,10 +79,18 @@ const ChatBody = T.Object(
   { additionalProperties: false },
 );
 
+const Usage = T.Object({
+  inputTokens: T.Integer(),
+  outputTokens: T.Integer(),
+  cacheReadTokens: T.Optional(T.Integer()),
+  cacheWriteTokens: T.Optional(T.Integer()),
+});
+
 const ChatResult = T.Object({
   conversationId: T.String(),
   text: T.String(),
   toolEvents: T.Array(ToolEvent),
+  usage: T.Optional(Usage),
 });
 
 const AiSettings = T.Object({
@@ -125,6 +140,17 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
     {
       schema: {
         tags: ["chat"],
+        summary: "Run one AI assistant turn (shared engine; web/mobile/CLI clients)",
+        description:
+          "One turn of the server-side AI assistant. With `Accept: text/event-stream` the " +
+          "response is an SSE stream of `tool`/`delta`/`approval`/`input_request`/`plan` events " +
+          "ending in exactly one `done` or `error` — this path supports the FULL feature set: " +
+          "write/destructive tools via the approval handshake (`POST /chat/approve`), structured " +
+          "elicitation (`POST /chat/answer`), and multi-step plans. Without that Accept header " +
+          "the response is the final JSON result only and write/destructive tools are declined " +
+          "(no approval transport). All clients (web, native mobile, CLI) should use the SSE path " +
+          "for parity. Event payload shapes: the ChatStreamEvent contract in @ss/shared; full " +
+          "protocol in docs/ai-assistant-api.md.",
         body: ChatBody,
         response: { 200: ChatResult, 404: Problem, 409: Problem },
       },
@@ -140,15 +166,30 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
         "cache-control": "no-cache",
         connection: "keep-alive",
       });
-      // Don't write to a socket the client already closed (mid-turn disconnect).
-      const send = (event: string, data: unknown) => {
+      // Cooperative cancellation: when the client disconnects (closes the stream /
+      // hits Stop), stop running more model/tool calls instead of finishing the turn.
+      let aborted = false;
+      reply.raw.on("close", () => {
+        aborted = true;
+      });
+      // Typed against the shared ChatStreamEvent contract (@ss/shared) so the engine
+      // can't emit a shape clients don't expect. Don't write to a socket the client
+      // already closed (mid-turn disconnect).
+      const send = <E extends ChatStreamEventName>(
+        event: E,
+        data: Extract<ChatStreamEvent, { event: E }>["data"],
+      ) => {
         if (!reply.raw.writableEnded) {
           reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
         }
       };
       const owner = ownerOf(req);
       // Pause a write/destructive tool until the user approves via /chat/approve.
-      const requestApproval = (r: { tool: string; input: Record<string, unknown>; risk: string }) =>
+      const requestApproval = (r: {
+        tool: string;
+        input: Record<string, unknown>;
+        risk: ChatToolRisk;
+      }) =>
         new Promise<boolean>((resolve) => {
           const id = randomUUID();
           const timer = setTimeout(() => {
@@ -181,7 +222,7 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
             },
             ...owner,
           });
-          send("input_request", { id, ...input });
+          send("input_request", { id, ...input } as ChatInputRequestEvent);
         });
       // Pause while the user reviews a proposed multi-step plan (Phase C). The
       // decision is a boolean, so it reuses the approval registry + /chat/approve;
@@ -201,7 +242,7 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
             },
             ...owner,
           });
-          send("plan", { id, ...plan });
+          send("plan", { id, ...plan } as ChatPlanEvent);
         });
       try {
         const result = await chatService.chatTurn(
@@ -213,6 +254,7 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
           requestApproval,
           requestInput,
           requestPlan,
+          () => aborted,
         );
         send("done", result);
       } catch (err) {
@@ -231,6 +273,11 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
     {
       schema: {
         tags: ["chat"],
+        summary: "Approve/decline a pending action or plan from a chat turn",
+        description:
+          "Resolves an `approval` or `plan` SSE event (from `POST /chat`) by its id. Only the " +
+          "org + user that owns the streaming turn may resolve it; `ok:false` if unknown, " +
+          "expired, or not the owner.",
         body: T.Object({ id: T.String(), approve: T.Boolean() }, { additionalProperties: false }),
         response: { 200: T.Object({ ok: T.Boolean() }) },
       },
@@ -249,6 +296,10 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
     {
       schema: {
         tags: ["chat"],
+        summary: "Submit/cancel a structured input request from a chat turn",
+        description:
+          "Resolves an `input_request` SSE event (from `POST /chat`) by its id; omit `answers` " +
+          "to cancel. Owner-bound (same org + user as the streaming turn).",
         body: T.Object(
           {
             id: T.String(),

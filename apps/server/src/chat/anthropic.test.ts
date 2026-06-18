@@ -45,8 +45,17 @@ function mockClient(finalMsg: unknown) {
 }
 
 describe("buildAnthropicCreateMessage", () => {
-  it("streams deltas, caches system + last tool, sets metadata, returns the final message", async () => {
-    const finalMsg = { content: [{ type: "text", text: "hi" }], stop_reason: "end_turn" };
+  it("streams deltas, caches system + last tool, sets metadata, maps usage", async () => {
+    const finalMsg = {
+      content: [{ type: "text", text: "hi" }],
+      stop_reason: "end_turn",
+      usage: {
+        input_tokens: 10,
+        output_tokens: 5,
+        cache_read_input_tokens: 3,
+        cache_creation_input_tokens: 2,
+      },
+    };
     const { client, get } = mockClient(finalMsg);
     const deltas: string[] = [];
     const createMessage = buildAnthropicCreateMessage(client, {
@@ -64,7 +73,14 @@ describe("buildAnthropicCreateMessage", () => {
     const res = await createMessage([{ role: "user", content: "hi" }] as never);
     const captured = get()!;
 
-    expect(res).toBe(finalMsg); // same shape as .create() → loop unchanged
+    expect(res.content).toEqual(finalMsg.content); // same content blocks → loop unchanged
+    expect(res.stop_reason).toBe("end_turn");
+    expect(res.usage).toEqual({
+      inputTokens: 10,
+      outputTokens: 5,
+      cacheReadTokens: 3,
+      cacheWriteTokens: 2,
+    });
     expect(deltas).toEqual(["tok"]); // streamed text reached onText
     expect(captured.system[0]?.cache_control).toEqual({ type: "ephemeral" });
     expect(captured.tools?.[0]?.cache_control).toBeUndefined(); // only the last tool
@@ -74,7 +90,11 @@ describe("buildAnthropicCreateMessage", () => {
   });
 
   it("omits tools + metadata when there are none / no user", async () => {
-    const { client, get } = mockClient({ content: [], stop_reason: "end_turn" });
+    const { client, get } = mockClient({
+      content: [],
+      stop_reason: "end_turn",
+      usage: { input_tokens: 0, output_tokens: 0 },
+    });
     const createMessage = buildAnthropicCreateMessage(client, {
       model: "m",
       system: "S",
@@ -89,7 +109,11 @@ describe("buildAnthropicCreateMessage", () => {
   });
 
   it("enables extended thinking with a budget under max_tokens + the beta header", async () => {
-    const { client, get, getOpts } = mockClient({ content: [], stop_reason: "end_turn" });
+    const { client, get, getOpts } = mockClient({
+      content: [],
+      stop_reason: "end_turn",
+      usage: { input_tokens: 0, output_tokens: 0 },
+    });
     const createMessage = buildAnthropicCreateMessage(client, {
       model: "m",
       system: "S",

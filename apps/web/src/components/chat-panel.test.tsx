@@ -279,6 +279,56 @@ describe("ChatPanel (component)", () => {
     expect(screen.getByRole("link", { name: "Deployed the app" })).toBeTruthy();
   });
 
+  it("shows a per-turn token usage line", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse(200, {
+          conversationId: "c1",
+          text: "answer",
+          toolEvents: [],
+          usage: { inputTokens: 1100, outputTokens: 200 },
+        }),
+      ),
+    );
+    renderComponent(<ChatPanel />);
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent("ss:assistant", { detail: { query: "hi" } }));
+    });
+    await screen.findByText("answer");
+    expect(screen.getByText("1.3k tokens")).toBeTruthy();
+  });
+
+  it("Stop aborts a running turn and shows it stopped", async () => {
+    // Mirror real fetch: the body stream is tied to the abort signal, so aborting
+    // errors the reader (which the panel catches and reports as stopped).
+    const fetchMock = vi.fn((_url: string, init?: { signal?: AbortSignal }) => {
+      const body = new ReadableStream<Uint8Array>({
+        start(c) {
+          init?.signal?.addEventListener("abort", () =>
+            c.error(new DOMException("aborted", "AbortError")),
+          );
+        },
+      });
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-type": "text/event-stream" }),
+        body,
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderComponent(<ChatPanel />);
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent("ss:assistant", { detail: { query: "do a lot" } }));
+    });
+    const stop = await screen.findByRole("button", { name: "Stop" });
+    await act(async () => {
+      fireEvent.click(stop);
+    });
+    await screen.findByText("Stopped.");
+  });
+
   it("surfaces a network failure as a conversation message, not a stuck spinner", async () => {
     vi.stubGlobal(
       "fetch",

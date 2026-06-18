@@ -8710,6 +8710,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Run one AI assistant turn (shared engine; web/mobile/CLI clients)
+         * @description One turn of the server-side AI assistant. With `Accept: text/event-stream` the response is an SSE stream of `tool`/`delta`/`approval`/`input_request`/`plan` events ending in exactly one `done` or `error` — this path supports the FULL feature set: write/destructive tools via the approval handshake (`POST /chat/approve`), structured elicitation (`POST /chat/answer`), and multi-step plans. Without that Accept header the response is the final JSON result only and write/destructive tools are declined (no approval transport). All clients (web, native mobile, CLI) should use the SSE path for parity. Event payload shapes: the ChatStreamEvent contract in @ss/shared; full protocol in docs/ai-assistant-api.md.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -8744,6 +8748,12 @@ export interface paths {
                                 result: string;
                                 isError?: boolean;
                             }[];
+                            usage?: {
+                                inputTokens: number;
+                                outputTokens: number;
+                                cacheReadTokens?: number;
+                                cacheWriteTokens?: number;
+                            };
                         };
                     };
                 };
@@ -8804,6 +8814,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Approve/decline a pending action or plan from a chat turn
+         * @description Resolves an `approval` or `plan` SSE event (from `POST /chat`) by its id. Only the org + user that owns the streaming turn may resolve it; `ok:false` if unknown, expired, or not the owner.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -8848,6 +8862,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Submit/cancel a structured input request from a chat turn
+         * @description Resolves an `input_request` SSE event (from `POST /chat`) by its id; omit `answers` to cancel. Owner-bound (same org + user as the streaming turn).
+         */
         post: {
             parameters: {
                 query?: never;

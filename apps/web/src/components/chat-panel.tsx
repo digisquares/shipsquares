@@ -17,16 +17,34 @@ import { createSseParser } from "../lib/sse";
 // per-turn summary; plain-JSON responses still work as the fallback. An
 // unconfigured org gets pointed at Settings instead of a dead spinner.
 
+interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+}
+
 interface Turn {
   role: "user" | "assistant";
   content: string;
   toolEvents?: AssistantToolEvent[];
+  usage?: TokenUsage;
 }
 
 interface ChatResult {
   conversationId: string;
   text: string;
   toolEvents: AssistantToolEvent[];
+  usage?: TokenUsage;
+}
+
+/** Compact token count for the per-turn usage line, e.g. "1.3k tokens". */
+function tokenLine(u?: TokenUsage): string | null {
+  if (!u) return null;
+  const total = u.inputTokens + u.outputTokens;
+  if (total <= 0) return null;
+  const n = total >= 1000 ? `${(total / 1000).toFixed(1)}k` : `${total}`;
+  return `${n} tokens`;
 }
 
 interface ApprovalReq {
@@ -216,6 +234,7 @@ export function ChatPanel() {
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const busyRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
   // Track the current page so send() can pass it as context without re-creating
   // the memoized callback on every navigation.
   const route = useRoute();
@@ -240,15 +259,23 @@ export function ChatPanel() {
       const fail = (content: string) => setTurns((t) => [...t, { role: "assistant", content }]);
       const finishTurn = (d: ChatResult) => {
         setConversationId(d.conversationId);
-        setTurns((t) => [...t, { role: "assistant", content: d.text, toolEvents: d.toolEvents }]);
+        setTurns((t) => [
+          ...t,
+          { role: "assistant", content: d.text, toolEvents: d.toolEvents, usage: d.usage },
+        ]);
         setLiveText(""); // the authoritative answer replaces the streamed preview
       };
+
+      const controller = new AbortController();
+      abortRef.current = controller;
+      const aborted = () => controller.signal.aborted;
 
       let res: Response;
       try {
         res = await fetch("/api/v1/chat", {
           method: "POST",
           credentials: "include",
+          signal: controller.signal,
           headers: {
             "content-type": "application/json",
             accept: "text/event-stream",
@@ -260,45 +287,52 @@ export function ChatPanel() {
           }),
         });
       } catch {
-        fail("I couldn't reach the server — check your connection and try again.");
+        if (aborted()) fail("Stopped.");
+        else fail("I couldn't reach the server — check your connection and try again.");
+        abortRef.current = null;
         busyRef.current = false;
         setBusy(false);
         return;
       }
 
       if (res.headers.get("content-type")?.includes("text/event-stream") && res.body) {
-        // Streamed turn: tool events render live, `done` lands the answer.
+        // Streamed turn: tool events render live, `done` lands the answer. A Stop
+        // (abort) makes reader.read() reject — caught below and treated as a clean stop.
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         const parser = createSseParser();
         let finalized = false;
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          for (const ev of parser.push(decoder.decode(value, { stream: true }))) {
-            if (ev.event === "tool") {
-              setLiveTools((p) => [...p, ev.data as AssistantToolEvent]);
-            } else if (ev.event === "delta") {
-              setLiveText((p) => p + ((ev.data as { text?: string }).text ?? ""));
-            } else if (ev.event === "approval") {
-              setPendingApproval(ev.data as ApprovalReq);
-            } else if (ev.event === "input_request") {
-              setPendingInput(ev.data as InputReq);
-            } else if (ev.event === "plan") {
-              setPendingPlan(ev.data as PlanReq);
-              setPlanApproved(false);
-            } else if (ev.event === "done") {
-              finalized = true;
-              finishTurn(ev.data as ChatResult);
-            } else if (ev.event === "error") {
-              finalized = true;
-              const d = ev.data as { code?: string; message?: string };
-              if (d.code === "ai.not_configured") setNotConfigured(true);
-              else fail(`That failed: ${d.message ?? "unknown error"}. Try again in a moment.`);
+        try {
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            for (const ev of parser.push(decoder.decode(value, { stream: true }))) {
+              if (ev.event === "tool") {
+                setLiveTools((p) => [...p, ev.data as AssistantToolEvent]);
+              } else if (ev.event === "delta") {
+                setLiveText((p) => p + ((ev.data as { text?: string }).text ?? ""));
+              } else if (ev.event === "approval") {
+                setPendingApproval(ev.data as ApprovalReq);
+              } else if (ev.event === "input_request") {
+                setPendingInput(ev.data as InputReq);
+              } else if (ev.event === "plan") {
+                setPendingPlan(ev.data as PlanReq);
+                setPlanApproved(false);
+              } else if (ev.event === "done") {
+                finalized = true;
+                finishTurn(ev.data as ChatResult);
+              } else if (ev.event === "error") {
+                finalized = true;
+                const d = ev.data as { code?: string; message?: string };
+                if (d.code === "ai.not_configured") setNotConfigured(true);
+                else fail(`That failed: ${d.message ?? "unknown error"}. Try again in a moment.`);
+              }
             }
           }
+        } catch {
+          /* reader aborted/errored — handled by the finalized check below */
         }
-        if (!finalized) fail("The stream ended unexpectedly — try again.");
+        if (!finalized) fail(aborted() ? "Stopped." : "The stream ended unexpectedly — try again.");
       } else {
         // Non-streaming fallback (older server / proxies that buffer SSE).
         const data: unknown = res.status === 204 ? null : await res.json().catch(() => null);
@@ -313,23 +347,37 @@ export function ChatPanel() {
       setPendingInput(null);
       setPendingPlan(null);
       setPlanApproved(false);
+      abortRef.current = null;
       busyRef.current = false;
       setBusy(false);
     },
     [conversationId],
   );
 
+  // Stop a running turn: aborting the stream closes the connection, which the
+  // server detects and uses to halt the tool loop (no more model/tool calls).
+  const stop = useCallback(() => abortRef.current?.abort(), []);
+
   // Approve/decline a proposed write/destructive action; the streaming turn is
   // blocked server-side and resumes once we POST the decision.
+  // POST a resolve to the blocked turn; if it fails, restore the card so the user
+  // can retry instead of the turn silently hanging until the server timeout.
+  const resolve = (url: string, body: unknown, restore: () => void) =>
+    fetch(url, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    })
+      .then((r) => {
+        if (!r.ok) restore();
+      })
+      .catch(() => restore());
+
   const respondApproval = useCallback((approve: boolean) => {
     setPendingApproval((p) => {
       if (p)
-        void fetch("/api/v1/chat/approve", {
-          method: "POST",
-          credentials: "include",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ id: p.id, approve }),
-        });
+        void resolve("/api/v1/chat/approve", { id: p.id, approve }, () => setPendingApproval(p));
       return null;
     });
   }, []);
@@ -339,12 +387,9 @@ export function ChatPanel() {
   const respondInput = useCallback((answers: Record<string, unknown> | null) => {
     setPendingInput((p) => {
       if (p)
-        void fetch("/api/v1/chat/answer", {
-          method: "POST",
-          credentials: "include",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ id: p.id, ...(answers ? { answers } : {}) }),
-        });
+        void resolve("/api/v1/chat/answer", { id: p.id, ...(answers ? { answers } : {}) }, () =>
+          setPendingInput(p),
+        );
       return null;
     });
   }, []);
@@ -354,15 +399,15 @@ export function ChatPanel() {
   // cancel we dismiss it.
   const respondPlan = useCallback(
     (approve: boolean) => {
-      if (!pendingPlan) return;
-      void fetch("/api/v1/chat/approve", {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id: pendingPlan.id, approve }),
-      });
+      const p = pendingPlan;
+      if (!p) return;
       if (approve) setPlanApproved(true);
       else setPendingPlan(null);
+      // On a failed POST, undo the optimistic state so the card returns for a retry.
+      void resolve("/api/v1/chat/approve", { id: p.id, approve }, () => {
+        if (approve) setPlanApproved(false);
+        else setPendingPlan(p);
+      });
     },
     [pendingPlan],
   );
@@ -474,6 +519,9 @@ export function ChatPanel() {
               {t.toolEvents && toolSummary(t.toolEvents) && (
                 <div className="chat-tools muted mono">{toolSummary(t.toolEvents)}</div>
               )}
+              {tokenLine(t.usage) && (
+                <div className="chat-usage muted mono">{tokenLine(t.usage)}</div>
+              )}
             </div>
           );
         })}
@@ -485,6 +533,9 @@ export function ChatPanel() {
             {liveTools.length > 0 && (
               <div className="chat-tools muted mono">{toolSummary(liveTools)}…</div>
             )}
+            <button type="button" className="btn btn-ghost btn-sm chat-stop" onClick={stop}>
+              Stop
+            </button>
           </div>
         )}
         {pendingApproval && (

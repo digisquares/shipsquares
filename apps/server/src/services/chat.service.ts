@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AppError, NotFoundError, newId } from "@ss/shared";
-import type { Env } from "@ss/shared";
+import type { ChatUsage, Env } from "@ss/shared";
 import { and, asc, desc, eq } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
@@ -283,6 +283,7 @@ export interface ChatTurnResult {
   conversationId: string;
   text: string;
   toolEvents: ToolEvent[];
+  usage?: ChatUsage;
 }
 
 /** One user turn: persist the message, run the tool loop with the caller's
@@ -301,6 +302,7 @@ export async function chatTurn(
   }) => Promise<boolean>,
   requestInput?: (input: Record<string, unknown>) => Promise<Record<string, unknown> | null>,
   requestPlan?: (plan: Record<string, unknown>) => Promise<boolean>,
+  shouldAbort?: () => boolean,
 ): Promise<ChatTurnResult> {
   const ctx = req.ctx as RequestContext;
   const orgId = ctx.organizationId!;
@@ -434,6 +436,7 @@ export async function chatTurn(
         ...(requestApproval ? { requestApproval } : {}),
         ...(requestInput ? { requestInput } : {}),
         ...(requestPlan ? { requestPlan } : {}),
+        ...(shouldAbort ? { shouldAbort } : {}),
         riskOf: (name) => {
           const t = findTool(name);
           if (t) return toolRisk(t);
@@ -510,5 +513,5 @@ export async function chatTurn(
     .set({ updatedAt: new Date() })
     .where(eq(conversations.id, conversationId));
 
-  return { conversationId, text: result.text, toolEvents: result.toolEvents };
+  return { conversationId, text: result.text, toolEvents: result.toolEvents, usage: result.usage };
 }
