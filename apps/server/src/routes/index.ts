@@ -13,6 +13,7 @@ import { dbStudioRoutes } from "./dbstudio.js";
 import { deploymentsRoutes } from "./deployments.js";
 import { domainsRoutes } from "./domains.js";
 import { envRoutes } from "./env.js";
+import { loginFlowAuthorizeRoutes } from "./login-flow.js";
 import { mailRoutes } from "./mail.js";
 import { membersRoutes } from "./members.js";
 import { metricAlertsRoutes } from "./metric-alerts.js";
@@ -51,6 +52,7 @@ export const v1Routes: FastifyPluginAsyncTypebox = async (app) => {
   await app.register(registryCredentialsRoutes);
   await app.register(replicasRoutes);
   await app.register(apiKeysRoutes);
+  await app.register(loginFlowAuthorizeRoutes);
   await app.register(membersRoutes);
   await app.register(metricAlertsRoutes);
   await app.register(catalogServicesRoutes);

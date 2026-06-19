@@ -10,7 +10,8 @@ export type Route =
   | { name: "studio" }
   | { name: "backups" }
   | { name: "mail" }
-  | { name: "invite"; token: string };
+  | { name: "invite"; token: string }
+  | { name: "login-flow"; redirect: string };
 
 function parse(): Route {
   const hash = window.location.hash.replace(/^#/, "");
@@ -23,6 +24,9 @@ function parse(): Route {
   if (hash === "/mail" || hash.startsWith("/mail/")) return { name: "mail" };
   const inv = /^\/invite\?token=([^&]+)/.exec(hash);
   if (inv) return { name: "invite", token: decodeURIComponent(inv[1]!) };
+  // Device Login Flow consent (docs/mobile/01): /login/flow bounces here.
+  const lf = /^\/login-flow\?redirect=([^&]+)/.exec(hash);
+  if (lf) return { name: "login-flow", redirect: decodeURIComponent(lf[1]!) };
   return { name: "dashboard" };
 }
 

@@ -15,6 +15,7 @@ import { consoleWsRoutes } from "./routes/console-ws.js";
 import { healthRoutes } from "./routes/health.js";
 import { hooksRoutes } from "./routes/hooks.js";
 import { v1Routes } from "./routes/index.js";
+import { loginFlowRedirectRoutes } from "./routes/login-flow.js";
 import { mcpRoutes } from "./routes/mcp.js";
 import { prometheusRoutes } from "./routes/prometheus.js";
 import { tlsAskRoutes } from "./routes/tls-ask.js";
@@ -58,6 +59,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(hooksRoutes); // public, signature-verified inbound webhooks
   await app.register(vcsGithubRoutes); // public, install-state-verified GitHub App callback
   await app.register(tlsAskRoutes); // loopback-only Caddy on-demand TLS gate
+  await app.register(loginFlowRedirectRoutes); // /login/flow → SPA consent (device Login Flow)
   await app.register(mcpRoutes); // /mcp streamable-HTTP MCP server (bearer/session-authed)
   await app.register(v1Routes, { prefix: "/api/v1" });
   await app.register(wsRoutes, { prefix: "/api/v1" }); // /api/v1/ws live logs

@@ -13,6 +13,7 @@ import { Catalog } from "./pages/catalog";
 import { Dashboard } from "./pages/dashboard";
 import { InviteAccept } from "./pages/invite";
 import { Login } from "./pages/login";
+import { LoginFlow } from "./pages/login-flow";
 import { Mail } from "./pages/mail";
 import { Settings } from "./pages/settings";
 
@@ -47,6 +48,8 @@ export function App() {
   // token in the hash), so it sits ahead of the session gate.
   if (route.name === "invite") return <InviteAccept token={route.token} />;
   if (!data) return <Login />;
+  // Device Login Flow consent — only the signed-in user can authorize a device.
+  if (route.name === "login-flow") return <LoginFlow redirect={route.redirect} />;
   return (
     <>
       {route.name === "app" ? (
