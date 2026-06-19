@@ -1,5 +1,5 @@
 import { AppError, ConflictError, NotFoundError, newId } from "@ss/shared";
-import { and, asc, desc, eq, gt, inArray, lt } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, gt, inArray, lt } from "drizzle-orm";
 
 import type { Db } from "../db/index.js";
 import { apps, deploymentLogs, deploymentSteps, deployments } from "../db/schema/index.js";
@@ -160,6 +160,36 @@ export async function listDeployments(
     .limit(opts.limit + 1);
   const built = buildPage(rows, opts.limit, (r) => r.queuedAt.toISOString());
   return { data: built.data.map(toView), page: built.page };
+}
+
+export interface OrgDeploymentView extends DeploymentView {
+  appName: string;
+}
+
+/**
+ * Org-wide recent deployments across every app (the mobile Deploys feed) — same
+ * `(queuedAt, id)` keyset as the per-app list, joined to the app name so each row is
+ * legible without a second lookup. Org-scoped; no per-app gate.
+ */
+export async function listOrgDeployments(
+  db: Db,
+  orgId: string,
+  opts: { limit: number; cursor?: string },
+): Promise<PageResult<OrgDeploymentView>> {
+  const keyset = afterCursor(deployments.queuedAt, deployments.id, opts.cursor);
+  const base = eq(deployments.organizationId, orgId);
+  const rows = await db
+    .select({ ...getTableColumns(deployments), appName: apps.name })
+    .from(deployments)
+    .innerJoin(apps, eq(apps.id, deployments.appId))
+    .where(keyset ? and(base, keyset) : base)
+    .orderBy(desc(deployments.queuedAt), desc(deployments.id))
+    .limit(opts.limit + 1);
+  const built = buildPage(rows, opts.limit, (r) => r.queuedAt.toISOString());
+  return {
+    data: built.data.map((r) => ({ ...toView(r), appName: r.appName })),
+    page: built.page,
+  };
 }
 
 export async function getDeployment(db: Db, orgId: string, id: string): Promise<DeploymentView> {

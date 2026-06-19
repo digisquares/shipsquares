@@ -63,6 +63,9 @@ const DeploymentStep = T.Object({
   finishedAt: T.Union([T.String({ format: "date-time" }), T.Null()]),
 });
 
+// Org-wide feed row: a deployment plus the app it belongs to (for a cross-app list).
+const OrgDeployment = T.Composite([Deployment, T.Object({ appName: T.String() })]);
+
 const AppIdParam = T.Object({ appId: T.String() });
 const IdParam = T.Object({ id: T.String() });
 const LogQuery = T.Object({
@@ -73,6 +76,25 @@ const LogQuery = T.Object({
 });
 
 export const deploymentsRoutes: FastifyPluginAsyncTypebox = async (app) => {
+  // Org-wide recent deployments across all apps (the mobile Deploys feed). There is
+  // no live WS for an org-wide stream — this is the REST source.
+  app.get(
+    "/deployments",
+    {
+      schema: {
+        tags: ["deployments"],
+        querystring: ListQuery,
+        response: { 200: Page(OrgDeployment) },
+      },
+      preHandler: app.requirePermission("deployment:read"),
+    },
+    async (req) =>
+      deploymentsService.listOrgDeployments(app.db, getOrgId(req), {
+        limit: req.query.limit ?? 25,
+        ...(req.query.cursor ? { cursor: req.query.cursor } : {}),
+      }),
+  );
+
   // Trigger a deploy. The pipeline runs in the background; the client polls the
   // deployment + its logs. 202 Accepted with the queued deployment.
   app.post(

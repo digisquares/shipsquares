@@ -2133,6 +2133,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/deployments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                    cursor?: string;
+                    sort?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: {
+                                id: string;
+                                appId: string;
+                                organizationId: string;
+                                status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+                                trigger: "push" | "manual" | "api" | "mcp" | "schedule" | "rollback" | "preview";
+                                commitAfter: string | null;
+                                errorMessage: string | null;
+                                meta: {
+                                    image?: string;
+                                    container?: string;
+                                    hostPort?: string;
+                                    host?: string;
+                                    containerPort?: number;
+                                    url?: string;
+                                } | null;
+                                /** Format: date-time */
+                                queuedAt: string;
+                                startedAt: string | null;
+                                finishedAt: string | null;
+                                appName: string;
+                            }[];
+                            page: {
+                                nextCursor: string | null;
+                                hasMore: boolean;
+                            };
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/apps/{appId}/deployments": {
         parameters: {
             query?: never;
