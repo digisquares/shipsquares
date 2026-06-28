@@ -104,6 +104,9 @@ export function DbPerformance() {
       setSnap(r.data);
       setSelected(null);
       setError("");
+    } else if (refresh) {
+      // A transient refresh failure shouldn't blank the last-good snapshot.
+      toast.error(errorDetail(r.data, r.status));
     } else {
       setSnap(null);
       setError(errorDetail(r.data, r.status));

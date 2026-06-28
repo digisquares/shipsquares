@@ -114,6 +114,9 @@ async function withAdmin<T>(adminUrl: string, fn: (sql: postgres.Sql) => Promise
   }
 }
 
+const PRELOAD_REMEDIATION =
+  "pg_stat_statements is not enabled on this server. Add 'pg_stat_statements' to shared_preload_libraries in postgresql.conf and restart Postgres.";
+
 /** Lazily install the extension; fail closed with an actionable 503 when the
  *  library isn't preloaded (a restart-only GUC we can't set from SQL). */
 async function ensureExtension(sql: postgres.Sql): Promise<void> {
@@ -122,10 +125,26 @@ async function ensureExtension(sql: postgres.Sql): Promise<void> {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     const detail = /shared_preload_libraries/i.test(msg)
-      ? "pg_stat_statements is not enabled on this server. Add 'pg_stat_statements' to shared_preload_libraries in postgresql.conf and restart Postgres."
+      ? PRELOAD_REMEDIATION
       : `could not enable pg_stat_statements: ${msg}`;
     throw new AppError(detail, { status: 503, code: "db_performance.extension_unavailable" });
   }
+}
+
+/** Map pg_stat_statements failures to actionable AppErrors; rethrow the rest for
+ *  the global handler to sanitize. Crucially, when the module isn't preloaded,
+ *  `CREATE EXTENSION` SUCCEEDS — it's the *view query* that raises "must be loaded
+ *  via shared_preload_libraries", so the remediation must be caught here too. */
+export function asPgssError(e: unknown): never {
+  if (e instanceof AppError) throw e; // already mapped (ensureExtension)
+  const msg = e instanceof Error ? e.message : String(e);
+  if (/shared_preload_libraries/i.test(msg) || /must be loaded/i.test(msg)) {
+    throw new AppError(PRELOAD_REMEDIATION, {
+      status: 503,
+      code: "db_performance.extension_unavailable",
+    });
+  }
+  throw e;
 }
 
 async function selectSnapshot(
@@ -152,10 +171,14 @@ export async function snapshot(
   limit?: number,
 ): Promise<PgssSnapshot> {
   const adminUrl = await getServerAdminUrl(db, config, orgId, serverId);
-  return withAdmin(adminUrl, async (sql) => {
-    await ensureExtension(sql);
-    return selectSnapshot(sql, serverId, limit ?? DEFAULT_LIMIT);
-  });
+  try {
+    return await withAdmin(adminUrl, async (sql) => {
+      await ensureExtension(sql);
+      return selectSnapshot(sql, serverId, limit ?? DEFAULT_LIMIT);
+    });
+  } catch (e) {
+    asPgssError(e);
+  }
 }
 
 export async function reset(
@@ -166,9 +189,13 @@ export async function reset(
   limit?: number,
 ): Promise<PgssSnapshot> {
   const adminUrl = await getServerAdminUrl(db, config, orgId, serverId);
-  return withAdmin(adminUrl, async (sql) => {
-    await ensureExtension(sql);
-    await sql.unsafe("SELECT pg_stat_statements_reset()");
-    return selectSnapshot(sql, serverId, limit ?? DEFAULT_LIMIT);
-  });
+  try {
+    return await withAdmin(adminUrl, async (sql) => {
+      await ensureExtension(sql);
+      await sql.unsafe("SELECT pg_stat_statements_reset()");
+      return selectSnapshot(sql, serverId, limit ?? DEFAULT_LIMIT);
+    });
+  } catch (e) {
+    asPgssError(e);
+  }
 }
