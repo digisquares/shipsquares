@@ -5,6 +5,9 @@
 services:
   postgres:
     image: postgres:17-alpine
+    # Preload pg_stat_statements so the DB Performance feature (docs/db-performance.md)
+    # works against the dev cluster — it's a restart-only GUC, set here at boot.
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
     environment:
       POSTGRES_DB: shipsquares_dev
       POSTGRES_USER: postgres

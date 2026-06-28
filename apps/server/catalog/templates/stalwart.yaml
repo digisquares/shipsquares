@@ -49,3 +49,6 @@ services:
       interval: 10s
       timeout: 20s
       retries: 10
+volumes:
+  stalwart-data:
+  snappymail-data:

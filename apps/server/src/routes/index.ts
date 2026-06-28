@@ -9,6 +9,7 @@ import { catalogRoutes } from "./catalog.js";
 import { chatRoutes } from "./chat.js";
 import { connectionsRoutes } from "./connections.js";
 import { databasesRoutes } from "./databases.js";
+import { dbPerformanceRoutes } from "./db-performance.js";
 import { dbStudioRoutes } from "./dbstudio.js";
 import { deploymentsRoutes } from "./deployments.js";
 import { domainsRoutes } from "./domains.js";
@@ -45,6 +46,7 @@ export const v1Routes: FastifyPluginAsyncTypebox = async (app) => {
   await app.register(auditRoutes);
   await app.register(catalogRoutes);
   await app.register(databasesRoutes);
+  await app.register(dbPerformanceRoutes);
   await app.register(dbStudioRoutes);
   await app.register(mailRoutes);
   await app.register(backupsRoutes);

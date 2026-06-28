@@ -11434,6 +11434,544 @@
         }
       }
     },
+    "/database-servers/{id}/pg-stat-statements": {
+      "get": {
+        "tags": [
+          "databases"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50,
+              "type": "integer"
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "serverId",
+                    "serverVersion",
+                    "statsReset",
+                    "capturedAt",
+                    "totals",
+                    "statements"
+                  ],
+                  "properties": {
+                    "serverId": {
+                      "type": "string"
+                    },
+                    "serverVersion": {
+                      "type": "string"
+                    },
+                    "statsReset": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "capturedAt": {
+                      "type": "string"
+                    },
+                    "totals": {
+                      "type": "object",
+                      "required": [
+                        "distinctStatements",
+                        "totalCalls",
+                        "totalExecMs"
+                      ],
+                      "properties": {
+                        "distinctStatements": {
+                          "type": "integer"
+                        },
+                        "totalCalls": {
+                          "type": "integer"
+                        },
+                        "totalExecMs": {
+                          "type": "number"
+                        }
+                      }
+                    },
+                    "statements": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "rank",
+                          "queryid",
+                          "database",
+                          "calls",
+                          "totalMs",
+                          "meanMs",
+                          "minMs",
+                          "maxMs",
+                          "stddevMs",
+                          "rows",
+                          "blksHit",
+                          "blksRead",
+                          "hitPct",
+                          "query"
+                        ],
+                        "properties": {
+                          "rank": {
+                            "type": "integer"
+                          },
+                          "queryid": {
+                            "type": "string"
+                          },
+                          "database": {
+                            "type": "string"
+                          },
+                          "calls": {
+                            "type": "integer"
+                          },
+                          "totalMs": {
+                            "type": "number"
+                          },
+                          "meanMs": {
+                            "type": "number"
+                          },
+                          "minMs": {
+                            "type": "number"
+                          },
+                          "maxMs": {
+                            "type": "number"
+                          },
+                          "stddevMs": {
+                            "type": "number"
+                          },
+                          "rows": {
+                            "type": "integer"
+                          },
+                          "blksHit": {
+                            "type": "integer"
+                          },
+                          "blksRead": {
+                            "type": "integer"
+                          },
+                          "hitPct": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "query": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "path",
+                          "message"
+                        ],
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "path",
+                          "message"
+                        ],
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/database-servers/{id}/pg-stat-statements/reset": {
+      "post": {
+        "tags": [
+          "databases"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50,
+              "type": "integer"
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "serverId",
+                    "serverVersion",
+                    "statsReset",
+                    "capturedAt",
+                    "totals",
+                    "statements"
+                  ],
+                  "properties": {
+                    "serverId": {
+                      "type": "string"
+                    },
+                    "serverVersion": {
+                      "type": "string"
+                    },
+                    "statsReset": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "capturedAt": {
+                      "type": "string"
+                    },
+                    "totals": {
+                      "type": "object",
+                      "required": [
+                        "distinctStatements",
+                        "totalCalls",
+                        "totalExecMs"
+                      ],
+                      "properties": {
+                        "distinctStatements": {
+                          "type": "integer"
+                        },
+                        "totalCalls": {
+                          "type": "integer"
+                        },
+                        "totalExecMs": {
+                          "type": "number"
+                        }
+                      }
+                    },
+                    "statements": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "rank",
+                          "queryid",
+                          "database",
+                          "calls",
+                          "totalMs",
+                          "meanMs",
+                          "minMs",
+                          "maxMs",
+                          "stddevMs",
+                          "rows",
+                          "blksHit",
+                          "blksRead",
+                          "hitPct",
+                          "query"
+                        ],
+                        "properties": {
+                          "rank": {
+                            "type": "integer"
+                          },
+                          "queryid": {
+                            "type": "string"
+                          },
+                          "database": {
+                            "type": "string"
+                          },
+                          "calls": {
+                            "type": "integer"
+                          },
+                          "totalMs": {
+                            "type": "number"
+                          },
+                          "meanMs": {
+                            "type": "number"
+                          },
+                          "minMs": {
+                            "type": "number"
+                          },
+                          "maxMs": {
+                            "type": "number"
+                          },
+                          "stddevMs": {
+                            "type": "number"
+                          },
+                          "rows": {
+                            "type": "integer"
+                          },
+                          "blksHit": {
+                            "type": "integer"
+                          },
+                          "blksRead": {
+                            "type": "integer"
+                          },
+                          "hitPct": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "query": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "path",
+                          "message"
+                        ],
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "path",
+                          "message"
+                        ],
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/db-connections": {
       "get": {
         "tags": [

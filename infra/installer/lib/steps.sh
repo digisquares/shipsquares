@@ -51,6 +51,14 @@ step_postgres() {
     esac
   fi
   systemctl enable --now postgresql
+  # Enable pg_stat_statements for DB performance diagnostics (docs/db-performance.md).
+  # The .so ships with postgresql-contrib (installed above); shared_preload_libraries
+  # is a restart-only GUC, so set it via ALTER SYSTEM and bounce the cluster — only
+  # when it isn't already loaded, to keep this step idempotent.
+  if ! sudo -u postgres psql -tAXc "SHOW shared_preload_libraries" | grep -q pg_stat_statements; then
+    sudo -u postgres psql -c "ALTER SYSTEM SET shared_preload_libraries = 'pg_stat_statements'"
+    systemctl restart postgresql
+  fi
   if ! command -v node >/dev/null 2>&1; then
     case "$OS_TYPE" in
       ubuntu|debian) curl -fsSL https://deb.nodesource.com/setup_22.x | bash -

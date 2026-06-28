@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
-import { UserMenu } from "../components/user-menu";
 import { api } from "../lib/api";
 import { toast } from "../lib/toast";
 import { CommitBar } from "../studio/commit-bar";
@@ -342,21 +341,9 @@ export function Studio() {
 
   return (
     <div className="studio">
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden />
-          <span className="brand-name">ShipSquares</span>
-          <span className="studio-title" style={{ marginLeft: 12, color: "var(--text-muted)" }}>
-            Database Studio
-          </span>
-        </div>
-        <div className="topbar-right">
-          <a className="btn btn-ghost btn-sm" href="#/">
-            Dashboard
-          </a>
-          <UserMenu />
-        </div>
-      </header>
+      <div className="studio-header">
+        <span className="studio-title">Database Studio</span>
+      </div>
 
       <div className="studio-body">
         <aside className="studio-rail" aria-label="Connections">

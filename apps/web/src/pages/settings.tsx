@@ -2,9 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 
 import { CopyButton } from "../components/copy-button";
 import { EmptyState } from "../components/empty-state";
+import { Page } from "../components/page";
 import { SkeletonRows } from "../components/skeleton";
-import { UpdatesCard } from "../components/updates";
-import { UserMenu } from "../components/user-menu";
 import { api } from "../lib/api";
 import { twoFactor, useSession } from "../lib/auth";
 import { confirm } from "../lib/confirm";
@@ -24,41 +23,14 @@ export function Settings() {
   }, []);
 
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <a href="#/" className="back-link">
-            ←
-          </a>
-          <span className="brand-mark" aria-hidden />
-          <span className="brand-name">Settings</span>
-        </div>
-        <div className="topbar-right">
-          <UserMenu />
-        </div>
-      </header>
-
-      <main className="page">
-        <div className="page-head">
-          <nav className="crumbs" aria-label="Breadcrumb">
-            <a href="#/">Dashboard</a>
-            <span className="crumbs-sep" aria-hidden>
-              /
-            </span>
-            <span aria-current="page">Settings</span>
-          </nav>
-          <h1>Settings</h1>
-          <p className="muted">Git connections, members, API keys, and the AI assistant.</p>
-        </div>
-
-        <VcsConnectionsCard />
-        <MembersCard />
-        <ApiKeysCard />
-        <TwoFactorCard />
-        <AiSettingsCard />
-        <UpdatesCard />
-      </main>
-    </div>
+    <Page
+      width="narrow"
+      crumbs={[{ label: "Dashboard", href: "#/" }, { label: "Settings" }]}
+      title="Settings"
+      subtitle="Your account — two-factor authentication and security."
+    >
+      <TwoFactorCard />
+    </Page>
   );
 }
 
@@ -71,7 +43,7 @@ interface Member {
   createdAt: string;
 }
 
-function MembersCard() {
+export function MembersCard() {
   const [members, setMembers] = useState<Member[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
 
@@ -305,7 +277,7 @@ interface ApiKey {
   createdAt: string;
 }
 
-function ApiKeysCard() {
+export function ApiKeysCard() {
   const [keys, setKeys] = useState<ApiKey[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [name, setName] = useState("");
@@ -435,7 +407,7 @@ interface AiSettingsView {
   thinking: boolean;
 }
 
-function AiSettingsCard() {
+export function AiSettingsCard() {
   const [view, setView] = useState<AiSettingsView | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("");
@@ -717,7 +689,7 @@ function TwoFactorCard() {
   );
 }
 
-function VcsConnectionsCard() {
+export function VcsConnectionsCard() {
   const [conns, setConns] = useState<VcsConnection[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
 

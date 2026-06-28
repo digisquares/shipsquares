@@ -138,6 +138,22 @@ async function serverRow(db: Db, orgId: string, serverId: string): Promise<Serve
   return rows[0];
 }
 
+/** Resolve a managed server's (org-scoped) admin connection URL for sibling
+ *  services that need direct admin SQL access — e.g. DB performance diagnostics.
+ *  Opening the sealed ref stays here so secret handling lives in one place. */
+export async function getServerAdminUrl(
+  db: Db,
+  config: Env,
+  orgId: string,
+  serverId: string,
+): Promise<string> {
+  const server = await serverRow(db, orgId, serverId);
+  if (server.engine !== "postgres") {
+    throw new ValidationError("only postgres servers expose performance stats");
+  }
+  return openStr(server.adminSecretRef, config);
+}
+
 /** Run a provisioning sequence over a one-shot admin connection. */
 async function withAdmin<T>(
   adminUrl: string,

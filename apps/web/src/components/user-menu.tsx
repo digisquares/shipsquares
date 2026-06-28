@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api } from "../lib/api";
 import { signOut, useSession } from "../lib/auth";
+import { useDensity } from "../lib/density";
 import { go } from "../lib/router";
 import { useTheme } from "../lib/theme";
 
@@ -18,6 +19,7 @@ interface MyOrg {
 export function UserMenu() {
   const { data } = useSession();
   const { theme, toggle } = useTheme();
+  const { density, toggle: toggleDensity } = useDensity();
   const [open, setOpen] = useState(false);
   const [orgs, setOrgs] = useState<MyOrg[]>([]);
   const [switching, setSwitching] = useState(false);
@@ -125,6 +127,17 @@ export function UserMenu() {
             }}
           >
             Switch to {theme === "dark" ? "light" : "dark"} theme
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="usermenu-item"
+            onClick={() => {
+              toggleDensity();
+              setOpen(false);
+            }}
+          >
+            {density === "compact" ? "Comfortable density" : "Compact density"}
           </button>
           <button
             type="button"

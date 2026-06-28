@@ -6,12 +6,26 @@
   --grid-line: color-mix(in srgb, var(--border) 55%, transparent);
 }
 
+/* Folded into the shared AppShell (P7): fill the content area below the topbar. */
 .studio {
-  height: 100vh;
+  height: calc(100vh - var(--topbar-h));
   display: grid;
   grid-template-rows: auto 1fr;
   background: var(--bg);
   color: var(--text);
+}
+.studio-header {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+}
+.studio-header .studio-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-muted);
 }
 
 .studio-body {

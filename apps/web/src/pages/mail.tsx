@@ -1,9 +1,9 @@
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
 import { EmptyState } from "../components/empty-state";
+import { Page } from "../components/page";
 import { SkeletonRows } from "../components/skeleton";
 import { StatusPill } from "../components/status-pill";
-import { UserMenu } from "../components/user-menu";
 import { api } from "../lib/api";
 import { confirm } from "../lib/confirm";
 import { pageTitle } from "../lib/page-title";
@@ -728,36 +728,18 @@ export function Mail() {
   }, []);
 
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden />
-          <span className="brand-name">ShipSquares</span>
-        </div>
-        <div className="topbar-right">
-          <a className="btn btn-ghost btn-sm" href="#/">
-            Dashboard
-          </a>
-          <a className="btn btn-ghost btn-sm" href="#/catalog">
-            Catalog
-          </a>
-          {instances && instances.length > 0 && (
+    <>
+      <Page
+        title="Email"
+        subtitle="Managed mailboxes on your domain — add a domain, verify DNS, and create inboxes."
+        actions={
+          instances && instances.length > 0 ? (
             <button className="btn btn-primary btn-sm" onClick={() => setConnecting(true)}>
               Connect mail server
             </button>
-          )}
-          <UserMenu />
-        </div>
-      </header>
-
-      <main className="page">
-        <div className="page-head">
-          <h1>Email</h1>
-          <p className="muted">
-            Managed mailboxes on your domain — add a domain, verify DNS, and create inboxes.
-          </p>
-        </div>
-
+          ) : undefined
+        }
+      >
         {instances === null ? (
           <div className="card">
             <SkeletonRows count={3} />
@@ -778,7 +760,7 @@ export function Mail() {
         ) : (
           instances.map((inst) => <InstanceCard key={inst.id} instance={inst} />)
         )}
-      </main>
+      </Page>
 
       {connecting && (
         <ConnectInstanceModal
@@ -789,6 +771,6 @@ export function Mail() {
           }}
         />
       )}
-    </div>
+    </>
   );
 }

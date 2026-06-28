@@ -4,23 +4,40 @@ import { useEffect, useState } from "react";
 // per 14-web-ui.md; this walking skeleton just needs dashboard <-> app detail).
 export type Route =
   | { name: "dashboard" }
-  | { name: "app"; appId: string }
+  | { name: "app"; appId: string; tab?: string }
   | { name: "settings" }
+  | { name: "admin"; section: string }
   | { name: "catalog" }
   | { name: "studio" }
   | { name: "backups" }
+  | { name: "servers" }
+  | { name: "db-performance" }
+  | { name: "activity" }
   | { name: "mail" }
   | { name: "invite"; token: string }
   | { name: "login-flow"; redirect: string };
 
 function parse(): Route {
   const hash = window.location.hash.replace(/^#/, "");
-  const m = /^\/apps\/([^/]+)/.exec(hash);
-  if (m) return { name: "app", appId: m[1]! };
+  // appId stops at "/" or "?"; the optional ?tab= picks the detail tab (P4).
+  const m = /^\/apps\/([^/?]+)/.exec(hash);
+  if (m) {
+    const tab = new URLSearchParams(hash.split("?")[1] ?? "").get("tab");
+    return { name: "app", appId: m[1]!, ...(tab ? { tab } : {}) };
+  }
   if (hash === "/settings" || hash.startsWith("/settings/")) return { name: "settings" };
+  // Org admin (P5): #/admin/<section>, default section "members".
+  if (hash === "/admin" || hash.startsWith("/admin/")) {
+    const section = hash.replace(/^\/admin\/?/, "").split(/[/?]/)[0] || "members";
+    return { name: "admin", section };
+  }
   if (hash === "/catalog" || hash.startsWith("/catalog/")) return { name: "catalog" };
   if (hash === "/studio" || hash.startsWith("/studio/")) return { name: "studio" };
   if (hash === "/backups" || hash.startsWith("/backups/")) return { name: "backups" };
+  if (hash === "/servers" || hash.startsWith("/servers/")) return { name: "servers" };
+  if (hash === "/db-performance" || hash.startsWith("/db-performance/"))
+    return { name: "db-performance" };
+  if (hash === "/activity" || hash.startsWith("/activity/")) return { name: "activity" };
   if (hash === "/mail" || hash.startsWith("/mail/")) return { name: "mail" };
   const inv = /^\/invite\?token=([^&]+)/.exec(hash);
   if (inv) return { name: "invite", token: decodeURIComponent(inv[1]!) };

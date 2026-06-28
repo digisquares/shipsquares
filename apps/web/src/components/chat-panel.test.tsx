@@ -41,7 +41,8 @@ describe("ChatPanel (component)", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { container } = renderComponent(<ChatPanel />);
 
-    expect(screen.getByRole("button", { name: /open the assistant/i })).toBeTruthy();
+    // The panel opens via the ss:assistant hand-off (the topbar button dispatches
+    // it; the floating FAB was absorbed into the topbar in P7).
     await act(async () => {
       window.dispatchEvent(
         new CustomEvent("ss:assistant", { detail: { query: "how many apps?" } }),

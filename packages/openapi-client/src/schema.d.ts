@@ -4976,6 +4976,216 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/database-servers/{id}/pg-stat-statements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            serverId: string;
+                            serverVersion: string;
+                            statsReset: string | null;
+                            capturedAt: string;
+                            totals: {
+                                distinctStatements: number;
+                                totalCalls: number;
+                                totalExecMs: number;
+                            };
+                            statements: {
+                                rank: number;
+                                queryid: string;
+                                database: string;
+                                calls: number;
+                                totalMs: number;
+                                meanMs: number;
+                                minMs: number;
+                                maxMs: number;
+                                stddevMs: number;
+                                rows: number;
+                                blksHit: number;
+                                blksRead: number;
+                                hitPct: number | null;
+                                query: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            type: string;
+                            title: string;
+                            status: number;
+                            code: string;
+                            detail?: string;
+                            instance?: string;
+                            errors?: {
+                                path: string;
+                                message: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            type: string;
+                            title: string;
+                            status: number;
+                            code: string;
+                            detail?: string;
+                            instance?: string;
+                            errors?: {
+                                path: string;
+                                message: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/database-servers/{id}/pg-stat-statements/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            serverId: string;
+                            serverVersion: string;
+                            statsReset: string | null;
+                            capturedAt: string;
+                            totals: {
+                                distinctStatements: number;
+                                totalCalls: number;
+                                totalExecMs: number;
+                            };
+                            statements: {
+                                rank: number;
+                                queryid: string;
+                                database: string;
+                                calls: number;
+                                totalMs: number;
+                                meanMs: number;
+                                minMs: number;
+                                maxMs: number;
+                                stddevMs: number;
+                                rows: number;
+                                blksHit: number;
+                                blksRead: number;
+                                hitPct: number | null;
+                                query: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            type: string;
+                            title: string;
+                            status: number;
+                            code: string;
+                            detail?: string;
+                            instance?: string;
+                            errors?: {
+                                path: string;
+                                message: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            type: string;
+                            title: string;
+                            status: number;
+                            code: string;
+                            detail?: string;
+                            instance?: string;
+                            errors?: {
+                                path: string;
+                                message: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/db-connections": {
         parameters: {
             query?: never;

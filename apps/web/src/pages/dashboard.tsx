@@ -2,11 +2,10 @@ import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
 
 import { EmptyState } from "../components/empty-state";
 import { Onboarding } from "../components/onboarding";
+import { Page } from "../components/page";
 import { RepoPicker } from "../components/repo-picker";
 import { SkeletonRows } from "../components/skeleton";
 import { StatusPill } from "../components/status-pill";
-import { UpdateBadge } from "../components/updates";
-import { UserMenu } from "../components/user-menu";
 import { api } from "../lib/api";
 import { confirm } from "../lib/confirm";
 import { onboardingComplete, type OnboardingState } from "../lib/onboarding";
@@ -196,178 +195,148 @@ export function Dashboard() {
   const showSuggestion = nameSuggestion !== "" && nameSuggestion !== newName.trim();
 
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden />
-          <span className="brand-name">ShipSquares</span>
-        </div>
-        <div className="topbar-right">
-          <a className="btn btn-ghost btn-sm" href="#/studio">
-            Database
-          </a>
-          <a className="btn btn-ghost btn-sm" href="#/backups">
-            Backups
-          </a>
-          <a className="btn btn-ghost btn-sm" href="#/mail">
-            Email
-          </a>
-          <a className="btn btn-ghost btn-sm" href="#/catalog">
-            Catalog
-          </a>
-          <UpdateBadge />
-          <UserMenu />
-        </div>
-      </header>
+    <Page title="Dashboard" subtitle="Your apps, deployments, and servers — all live.">
+      {apps !== null && !onboardingComplete(onboarding) && (
+        <Onboarding state={onboarding} onCreateApp={() => setShowNew(true)} />
+      )}
 
-      <main className="page">
-        <div className="page-head">
-          <h1>Dashboard</h1>
-          <p className="muted">Your apps, deployments, and servers — all live.</p>
+      <section className="card">
+        <div className="card-head">
+          <h2>Apps</h2>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowNew((v) => !v)}>
+            {showNew ? "Cancel" : "New app"}
+          </button>
         </div>
 
-        {apps !== null && !onboardingComplete(onboarding) && (
-          <Onboarding state={onboarding} onCreateApp={() => setShowNew(true)} />
+        {showNew && (
+          <details className="repo-picker-details">
+            <summary>Pick from a connected repo</summary>
+            <RepoPicker
+              onPick={(repo, connectionId) => {
+                setNewName(slugifyAppName(repo.name));
+                setNewRepo(repo.cloneUrl);
+                setNewVcsConnectionId(connectionId);
+              }}
+            />
+          </details>
+        )}
+        {showNew && (
+          <form className="new-app" onSubmit={onCreate}>
+            <input
+              autoFocus
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              aria-label="App name"
+              placeholder="name (e.g. api)"
+              maxLength={63}
+              aria-invalid={nameError ? true : undefined}
+              aria-describedby={nameError ? "new-app-name-error" : undefined}
+            />
+            <input
+              value={newRepo}
+              onChange={(e) => {
+                setNewRepo(e.target.value);
+                setNewVcsConnectionId(""); // a manual repo edit unbinds the picked connection
+              }}
+              aria-label="Git repository URL"
+              placeholder="git repo url"
+            />
+            <input
+              value={newImage}
+              onChange={(e) => setNewImage(e.target.value)}
+              aria-label="Docker image"
+              placeholder="or docker image (e.g. nginx:alpine)"
+            />
+            <input
+              value={newPort}
+              onChange={(e) => setNewPort(e.target.value)}
+              aria-label="Container port"
+              placeholder="port (default 8080)"
+              inputMode="numeric"
+            />
+            <input
+              value={newCpu}
+              onChange={(e) => setNewCpu(e.target.value)}
+              aria-label="CPU cores"
+              placeholder="cpu cores (e.g. 0.5)"
+              inputMode="decimal"
+            />
+            <input
+              value={newMem}
+              onChange={(e) => setNewMem(e.target.value)}
+              aria-label="Memory limit MB"
+              placeholder="memory MB (e.g. 256)"
+              inputMode="numeric"
+            />
+            <button
+              className="btn btn-primary btn-sm"
+              type="submit"
+              disabled={creating || !newName.trim() || !!nameError}
+            >
+              {creating ? "Creating…" : "Create"}
+            </button>
+          </form>
+        )}
+        {showNew && nameError && (
+          <p id="new-app-name-error" className="field-error">
+            {nameError}
+            {showSuggestion && (
+              <>
+                {" — "}
+                <button
+                  type="button"
+                  className="link-btn"
+                  onClick={() => setNewName(nameSuggestion)}
+                >
+                  use “{nameSuggestion}”
+                </button>
+              </>
+            )}
+          </p>
         )}
 
-        <section className="card">
-          <div className="card-head">
-            <h2>Apps</h2>
-            <button className="btn btn-primary btn-sm" onClick={() => setShowNew((v) => !v)}>
-              {showNew ? "Cancel" : "New app"}
-            </button>
-          </div>
-
-          {showNew && (
-            <details className="repo-picker-details">
-              <summary>Pick from a connected repo</summary>
-              <RepoPicker
-                onPick={(repo, connectionId) => {
-                  setNewName(slugifyAppName(repo.name));
-                  setNewRepo(repo.cloneUrl);
-                  setNewVcsConnectionId(connectionId);
-                }}
-              />
-            </details>
-          )}
-          {showNew && (
-            <form className="new-app" onSubmit={onCreate}>
-              <input
-                autoFocus
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                aria-label="App name"
-                placeholder="name (e.g. api)"
-                maxLength={63}
-                aria-invalid={nameError ? true : undefined}
-                aria-describedby={nameError ? "new-app-name-error" : undefined}
-              />
-              <input
-                value={newRepo}
-                onChange={(e) => {
-                  setNewRepo(e.target.value);
-                  setNewVcsConnectionId(""); // a manual repo edit unbinds the picked connection
-                }}
-                aria-label="Git repository URL"
-                placeholder="git repo url"
-              />
-              <input
-                value={newImage}
-                onChange={(e) => setNewImage(e.target.value)}
-                aria-label="Docker image"
-                placeholder="or docker image (e.g. nginx:alpine)"
-              />
-              <input
-                value={newPort}
-                onChange={(e) => setNewPort(e.target.value)}
-                aria-label="Container port"
-                placeholder="port (default 8080)"
-                inputMode="numeric"
-              />
-              <input
-                value={newCpu}
-                onChange={(e) => setNewCpu(e.target.value)}
-                aria-label="CPU cores"
-                placeholder="cpu cores (e.g. 0.5)"
-                inputMode="decimal"
-              />
-              <input
-                value={newMem}
-                onChange={(e) => setNewMem(e.target.value)}
-                aria-label="Memory limit MB"
-                placeholder="memory MB (e.g. 256)"
-                inputMode="numeric"
-              />
-              <button
-                className="btn btn-primary btn-sm"
-                type="submit"
-                disabled={creating || !newName.trim() || !!nameError}
-              >
-                {creating ? "Creating…" : "Create"}
-              </button>
-            </form>
-          )}
-          {showNew && nameError && (
-            <p id="new-app-name-error" className="field-error">
-              {nameError}
-              {showSuggestion && (
-                <>
-                  {" — "}
+        {apps === null ? (
+          <SkeletonRows count={3} />
+        ) : apps.length > 0 ? (
+          <ul className="app-list">
+            {apps.map((a) => {
+              const st = deploys[a.id]?.status;
+              const busy = st === "queued" || st === "running";
+              return (
+                <li key={a.id} className="app-row">
+                  <a className="app-name app-link" href={`#/apps/${a.id}`}>
+                    {a.name}
+                  </a>
+                  {a.branch && <span className="muted mono">{a.branch}</span>}
+                  <span className="app-id muted mono">{a.id}</span>
+                  {st && <StatusPill status={st} />}
                   <button
-                    type="button"
-                    className="link-btn"
-                    onClick={() => setNewName(nameSuggestion)}
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => void deploy(a.id)}
+                    disabled={busy || (!a.repo && !a.image)}
+                    title={a.repo ? "Deploy" : "Add a repo to deploy"}
                   >
-                    use “{nameSuggestion}”
+                    {busy ? "Deploying…" : "Deploy"}
                   </button>
-                </>
-              )}
-            </p>
-          )}
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <EmptyState
+            title="No apps yet"
+            description={note || "Create your first app to get started."}
+            action={
+              <button className="btn btn-primary btn-sm" onClick={() => setShowNew(true)}>
+                New app
+              </button>
+            }
+          />
+        )}
+      </section>
 
-          {apps === null ? (
-            <SkeletonRows count={3} />
-          ) : apps.length > 0 ? (
-            <ul className="app-list">
-              {apps.map((a) => {
-                const st = deploys[a.id]?.status;
-                const busy = st === "queued" || st === "running";
-                return (
-                  <li key={a.id} className="app-row">
-                    <a className="app-name app-link" href={`#/apps/${a.id}`}>
-                      {a.name}
-                    </a>
-                    {a.branch && <span className="muted mono">{a.branch}</span>}
-                    <span className="app-id muted mono">{a.id}</span>
-                    {st && <StatusPill status={st} />}
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => void deploy(a.id)}
-                      disabled={busy || (!a.repo && !a.image)}
-                      title={a.repo ? "Deploy" : "Add a repo to deploy"}
-                    >
-                      {busy ? "Deploying…" : "Deploy"}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <EmptyState
-              title="No apps yet"
-              description={note || "Create your first app to get started."}
-              action={
-                <button className="btn btn-primary btn-sm" onClick={() => setShowNew(true)}>
-                  New app
-                </button>
-              }
-            />
-          )}
-        </section>
-
-        <NotificationsCard />
-      </main>
-    </div>
+      <NotificationsCard />
+    </Page>
   );
 }
 

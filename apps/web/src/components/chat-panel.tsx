@@ -431,18 +431,9 @@ export function ChatPanel() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [turns, busy]);
 
-  if (!open) {
-    return (
-      <button
-        type="button"
-        className="chat-trigger"
-        aria-label="Open the assistant"
-        onClick={() => setOpen(true)}
-      >
-        Assistant
-      </button>
-    );
-  }
+  // No floating trigger — the topbar Assistant button opens this via the
+  // ss:assistant event (P7: FAB absorbed into the topbar).
+  if (!open) return null;
 
   return (
     // Not a modal: a persistent side panel, so the complementary landmark

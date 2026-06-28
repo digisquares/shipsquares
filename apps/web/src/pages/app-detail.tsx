@@ -7,10 +7,10 @@ import { DeployTimeline } from "../components/deploy-timeline";
 import { EmptyState } from "../components/empty-state";
 import { LogViewer } from "../components/log-viewer";
 import { MetricChart } from "../components/metric-chart";
+import { Page } from "../components/page";
 import { SchedulesCard } from "../components/schedules-card";
 import { Sparkline } from "../components/sparkline";
 import { StatusPill } from "../components/status-pill";
-import { UserMenu } from "../components/user-menu";
 import { api } from "../lib/api";
 import { confirm } from "../lib/confirm";
 import type { ApiStep } from "../lib/deploy-timeline";
@@ -76,7 +76,19 @@ interface Metrics {
   memUsage?: string;
 }
 
-export function AppDetail({ appId }: { appId: string }) {
+const TABS = [
+  { key: "deployments", label: "Deployments" },
+  { key: "logs", label: "Logs" },
+  { key: "console", label: "Console" },
+  { key: "metrics", label: "Metrics" },
+  { key: "environment", label: "Environment" },
+  { key: "domains", label: "Domains" },
+  { key: "settings", label: "Settings" },
+] as const;
+type TabKey = (typeof TABS)[number]["key"];
+
+export function AppDetail({ appId, tab }: { appId: string; tab?: string }) {
+  const activeTab: TabKey = TABS.some((t) => t.key === tab) ? (tab as TabKey) : "deployments";
   const [app, setApp] = useState<AppT | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [deploys, setDeploys] = useState<DeploymentT[]>([]);
@@ -362,39 +374,33 @@ export function AppDetail({ appId }: { appId: string }) {
   }
 
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <a href="#/" className="back-link">
-            ←
+    <Page
+      width="wide"
+      crumbs={[{ label: "Dashboard", href: "#/" }, { label: app.name }]}
+      title={app.name}
+      subtitle={
+        <span className="mono">
+          {app.repo ?? (app.image ? `image: ${app.image}` : "no source")} · port {app.port}
+          {app.cpu != null && ` · ${app.cpu} cpu`}
+          {app.memoryMb != null && ` · ${app.memoryMb} MB`}
+        </span>
+      }
+    >
+      <nav className="tabs" aria-label="App sections">
+        {TABS.map((t) => (
+          <a
+            key={t.key}
+            className={`tab${activeTab === t.key ? " active" : ""}`}
+            href={`#/apps/${appId}?tab=${t.key}`}
+            aria-current={activeTab === t.key ? "page" : undefined}
+          >
+            {t.label}
           </a>
-          <span className="brand-mark" aria-hidden />
-          <span className="brand-name">{app.name}</span>
-          {app.repo && <span className="muted mono">{app.branch}</span>}
-        </div>
-        <div className="topbar-right">
-          <UserMenu />
-        </div>
-      </header>
+        ))}
+      </nav>
 
-      <main className="page">
-        <div className="page-head">
-          <nav className="crumbs" aria-label="Breadcrumb">
-            <a href="#/">Dashboard</a>
-            <span className="crumbs-sep" aria-hidden>
-              /
-            </span>
-            <span aria-current="page">{app.name}</span>
-          </nav>
-          <h1>{app.name}</h1>
-          <p className="muted mono">
-            {app.repo ?? (app.image ? `image: ${app.image}` : "no source")} · port {app.port}
-            {app.cpu != null && ` · ${app.cpu} cpu`}
-            {app.memoryMb != null && ` · ${app.memoryMb} MB`}
-          </p>
-        </div>
-
-        {/* Live resource metrics + lifecycle controls */}
+      {/* Live resource metrics + lifecycle controls */}
+      {activeTab === "metrics" && (
         <section className="card">
           <div className="card-head">
             <h2>Live metrics</h2>
@@ -460,12 +466,14 @@ export function AppDetail({ appId }: { appId: string }) {
           {/* Historical series from the collector (1-min samples, bucketed) */}
           <MetricChart appId={appId} />
         </section>
+      )}
 
-        <BuildSettingsCard appId={appId} />
+      {activeTab === "settings" && <BuildSettingsCard appId={appId} />}
 
-        <SchedulesCard appId={appId} />
+      {activeTab === "settings" && <SchedulesCard appId={appId} />}
 
-        {/* Runtime logs (the running container's stdout/stderr, live) */}
+      {/* Runtime logs (the running container's stdout/stderr, live) */}
+      {activeTab === "logs" && (
         <section className="card">
           <div className="card-head">
             <h2>Runtime logs</h2>
@@ -473,8 +481,10 @@ export function AppDetail({ appId }: { appId: string }) {
           </div>
           <LogViewer lines={runtimeLogs} emptyText={runtimeNote || "Waiting for output…"} />
         </section>
+      )}
 
-        {/* Interactive console (exec into the running container) */}
+      {/* Interactive console (exec into the running container) */}
+      {activeTab === "console" && (
         <section className="card">
           <div className="card-head">
             <h2>Console</h2>
@@ -497,8 +507,10 @@ export function AppDetail({ appId }: { appId: string }) {
             </p>
           )}
         </section>
+      )}
 
-        {/* Deployments + logs */}
+      {/* Deployments + logs */}
+      {activeTab === "deployments" && (
         <section className="card">
           <div className="card-head">
             <h2>Deployments</h2>
@@ -575,8 +587,10 @@ export function AppDetail({ appId }: { appId: string }) {
             </>
           )}
         </section>
+      )}
 
-        {/* Env */}
+      {/* Env */}
+      {activeTab === "environment" && (
         <section className="card">
           <div className="card-head">
             <h2>Environment</h2>
@@ -646,8 +660,10 @@ export function AppDetail({ appId }: { appId: string }) {
             </div>
           </form>
         </section>
+      )}
 
-        {/* Domains */}
+      {/* Domains */}
+      {activeTab === "domains" && (
         <section className="card">
           <div className="card-head">
             <h2>Domains</h2>
@@ -688,8 +704,10 @@ export function AppDetail({ appId }: { appId: string }) {
             </button>
           </form>
         </section>
+      )}
 
-        {/* Webhook */}
+      {/* Webhook */}
+      {activeTab === "settings" && (
         <section className="card">
           <div className="card-head">
             <h2>Auto-deploy webhook</h2>
@@ -720,7 +738,7 @@ export function AppDetail({ appId }: { appId: string }) {
             <p className="muted">No webhook yet. Create one to deploy on git push.</p>
           )}
         </section>
-      </main>
-    </div>
+      )}
+    </Page>
   );
 }

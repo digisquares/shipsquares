@@ -12,9 +12,6 @@ interface AppLite {
   branch?: string;
 }
 
-const isMac = typeof navigator !== "undefined" && /mac/i.test(navigator.platform);
-const SHORTCUT_LABEL = isMac ? "⌘K" : "Ctrl K";
-
 // Global ⌘K / Ctrl+K command palette (25-design-system.md). Navigates and acts;
 // an unmatched query offers the AI assistant (wired in a later iteration via the
 // `ss:assistant` event). Accessible (combobox/listbox, focus restore, keyboard
@@ -46,8 +43,15 @@ export function CommandPalette() {
         setOpen((v) => !v);
       }
     };
+    // The topbar Search affordance opens the palette via this event (P7: the
+    // floating FAB was absorbed into the topbar).
+    const onOpen = () => setOpen(true);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("ss:command-palette", onOpen);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("ss:command-palette", onOpen);
+    };
   }, []);
 
   // On open: remember focus, focus the input, and load apps for "Open <app>".
@@ -83,6 +87,13 @@ export function CommandPalette() {
         group: "Navigate",
         keywords: ["mail", "email", "mailbox", "domain", "inbox", "smtp", "dns"],
         run: () => go("#/mail"),
+      },
+      {
+        id: "nav-db-performance",
+        title: "Go to DB Performance",
+        group: "Navigate",
+        keywords: ["database", "postgres", "pg_stat_statements", "slow", "query", "performance"],
+        run: () => go("#/db-performance"),
       },
       {
         id: "act-add-mail-domain",
@@ -154,19 +165,8 @@ export function CommandPalette() {
     [askIndex, results, query, close],
   );
 
-  if (!open) {
-    return (
-      <button
-        type="button"
-        className="cmdk-trigger"
-        aria-label="Open command palette"
-        onClick={() => setOpen(true)}
-      >
-        <span className="cmdk-kbd">{SHORTCUT_LABEL}</span>
-        <span>Command palette</span>
-      </button>
-    );
-  }
+  // No floating trigger — the topbar Search button opens this (P7). ⌘K still works.
+  if (!open) return null;
 
   return (
     <div className="cmdk-overlay" role="presentation" onMouseDown={close}>

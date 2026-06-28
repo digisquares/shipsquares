@@ -38,3 +38,25 @@ jobs:
       # routes (plan 20's openapi-check).
       - run: pnpm -s openapi:gen
       - run: git diff --exit-code apps/server/openapi.json packages/openapi-client/src/schema.d.ts
+
+  # Browser E2E for the dashboard, mocked mode (built SPA + in-page mock control
+  # plane — no backend). Runs on every PR; the full-stack pass is nightly/VM.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -F @ss/web exec playwright install --with-deps chromium
+      - run: pnpm -F @ss/web e2e
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7
