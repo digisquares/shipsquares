@@ -46,6 +46,31 @@ describe("classify", () => {
     expect(classify("select 1; frobnicate x").statementClass).toBe("unknown");
     expect(classify("   ").statementCount).toBe(0);
   });
+
+  it("does not let a backslash hide a second statement (Postgres std strings)", () => {
+    // `\` is not a string escape in PG: the literal ends at the first quote, so
+    // the injected DROP is a real second statement, not swallowed into a "read".
+    const a = classify("select '\\';drop table t--'");
+    expect(a.statementCount).toBe(2);
+    expect(a.statementClass).toBe("ddl");
+  });
+
+  it("treats EXPLAIN ANALYZE of a write as a write (it executes the statement)", () => {
+    expect(classify("explain analyze update t set a=1").statementClass).toBe("write");
+    expect(classify("explain (analyze) delete from t").statementClass).toBe("write");
+    expect(
+      classify("explain (analyze true, verbose) insert into t values (1)").statementClass,
+    ).toBe("write");
+    // a write under EXPLAIN ANALYZE keeps its destructive/missing-WHERE flags
+    expect(classify("explain analyze delete from t").destructive).toBe(true);
+  });
+
+  it("keeps a plain (non-analyze) EXPLAIN as a read — it only plans", () => {
+    expect(classify("explain update t set a=1").statementClass).toBe("read");
+    expect(classify("explain verbose delete from t").statementClass).toBe("read");
+    expect(classify("explain (costs off) update t set a=1").statementClass).toBe("read");
+    expect(classify("explain select * from t").statementClass).toBe("read");
+  });
 });
 
 describe("stripNoise", () => {

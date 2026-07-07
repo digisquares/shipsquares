@@ -97,6 +97,29 @@ describe("Mail workspace (component)", () => {
     expect(screen.getByRole("button", { name: /connect mail server/i })).toBeTruthy();
   });
 
+  it("shows an error state with Retry (not a fake empty) when the mail API fails, and recovers", async () => {
+    let firstInstances = true;
+    globalThis.fetch = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/mail/instances")) {
+        if (firstInstances) {
+          firstInstances = false;
+          return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve(null) });
+        }
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([instance]) });
+      }
+      if (/\/mail\/instances\/[^/]+\/domains$/.test(url))
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([domain]) });
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) });
+    }) as unknown as typeof fetch;
+    renderComponent(<Mail />);
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByText(/couldn't load mail/i)).toBeTruthy();
+    expect(screen.queryByText("No mail server yet")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+    expect(await screen.findByText("mail.acme.com")).toBeTruthy();
+  });
+
   it("blocks an invalid domain with an inline error and makes no API call", async () => {
     const calls = mockApi();
     renderComponent(<Mail />);

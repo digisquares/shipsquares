@@ -59,7 +59,7 @@ describe("ChatPanel (component)", () => {
     await expectNoA11yViolations(container);
   });
 
-  it("points an unconfigured org at Settings instead of erroring", async () => {
+  it("points an unconfigured org at the Admin AI page instead of erroring", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => jsonResponse(409, { code: "ai.not_configured" })),
@@ -69,7 +69,8 @@ describe("ChatPanel (component)", () => {
       window.dispatchEvent(new CustomEvent("ss:assistant", { detail: { query: "hi" } }));
     });
     await screen.findByText(/isn(’|')t configured/);
-    expect(screen.getByRole("link", { name: /Settings/ })).toBeTruthy();
+    const link = screen.getByRole("link", { name: /AI assistant/ });
+    expect(link.getAttribute("href")).toBe("#/admin/ai");
   });
 
   it("streams an SSE turn: live tool activity, then the final answer", async () => {

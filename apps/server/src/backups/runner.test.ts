@@ -165,4 +165,31 @@ describe("runBackup", () => {
     expect(r.ok).toBe(false);
     expect(finished[0]).toMatchObject({ status: "failed", error: "ssh unreachable" });
   });
+
+  it("scrubs the S3 secret from a failure's stderr before recording it (M4)", async () => {
+    const secretSpec: BackupSpec = {
+      ...spec,
+      dest: {
+        ...spec.dest,
+        secretAccessKey: "s3cretAccessKeyValue123",
+        accessKeyId: "AKIAEXAMPLE1",
+      },
+    };
+    const exec = vi.fn(async () => ({
+      code: 1,
+      lines: [
+        {
+          stream: "stderr" as const,
+          line: "Failed to create file system for :s3,access_key_id=AKIAEXAMPLE1,secret_access_key=s3cretAccessKeyValue123:backups",
+        },
+      ],
+    }));
+    const { deps, finished } = makeDeps({ exec });
+    const r = await runBackup(secretSpec, deps);
+    expect(r.ok).toBe(false);
+    const error = String((finished[0] as { error?: string }).error);
+    expect(error).not.toContain("s3cretAccessKeyValue123");
+    expect(error).not.toContain("AKIAEXAMPLE1");
+    expect(error).toContain("***");
+  });
 });

@@ -1,3 +1,6 @@
+import { swallow } from "../lib/swallow.js";
+import { makeRedactor } from "../secrets/redact.js";
+
 import {
   backupFilename,
   deleteFileCommand,
@@ -63,19 +66,28 @@ export async function runBackup(spec: BackupSpec, deps: BackupRunDeps): Promise<
   const remote = s3Remote(spec.dest, location);
   const command = uploadPipeline(spec.dump, remote);
 
+  // rclone echoes the full inline remote (incl. secret_access_key) in "failed to
+  // create file system" errors, so scrub the S3 credentials from any stderr we
+  // persist to db_backups.error / return to the API (M4).
+  const redact = makeRedactor(new Set([spec.dest.secretAccessKey, spec.dest.accessKeyId]));
+
   const runId = await deps.record.start();
   const finish = async (patch: Record<string, unknown>): Promise<void> => {
-    await deps.record.finish(runId, { finishedAt: deps.now(), ...patch }).catch(() => undefined);
+    await deps.record
+      .finish(runId, { finishedAt: deps.now(), ...patch })
+      .catch((e) => swallow("backup.record_finish", e));
   };
 
   try {
     const res = await deps.exec(command);
     if (res.code !== 0) {
-      const tail = res.lines
-        .filter((l) => l.stream === "stderr")
-        .slice(-ERROR_TAIL_LINES)
-        .map((l) => l.line)
-        .join("\n");
+      const tail = redact(
+        res.lines
+          .filter((l) => l.stream === "stderr")
+          .slice(-ERROR_TAIL_LINES)
+          .map((l) => l.line)
+          .join("\n"),
+      );
       const error = `backup failed (exit ${res.code}${res.timedOut ? ", timed out" : ""})${tail ? `: ${tail}` : ""}`;
       await finish({ status: "failed", error });
       return { ok: false, error };
@@ -87,7 +99,7 @@ export async function runBackup(spec: BackupSpec, deps: BackupRunDeps): Promise<
     await finish({ status: "success", location, ...(sizeBytes === null ? {} : { sizeBytes }) });
     return { ok: true, location };
   } catch (e) {
-    const error = e instanceof Error ? e.message : String(e);
+    const error = redact(e instanceof Error ? e.message : String(e));
     await finish({ status: "failed", error });
     return { ok: false, error };
   }
@@ -134,7 +146,7 @@ async function applyRetention(spec: BackupSpec, deps: BackupRunDeps): Promise<vo
     for (const name of prune) {
       await deps
         .exec(deleteFileCommand(s3Remote(spec.dest, `${spec.prefix}/${name}`)))
-        .catch(() => undefined);
+        .catch((e) => swallow("backup.retention_prune", e));
     }
   } catch {
     // retention is best-effort

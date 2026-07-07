@@ -25,6 +25,7 @@ import {
 import { runCommand } from "../deploy/exec.js";
 import { isValidCron, nextCronRun } from "../schedules/core.js";
 import { loadMasterKey, open, seal } from "../secrets/crypto.js";
+import { makeRedactor } from "../secrets/redact.js";
 import type { SealedValue } from "../secrets/types.js";
 
 // Scheduled backups for provisioned databases (27 over 24): the destination
@@ -514,11 +515,12 @@ export async function restoreBackupRun(
   }
 
   const target = JSON.parse(openStr(cfg.targetRef, config)) as SealedTarget;
+  const dbPassword = openStr(owner.passwordSecretRef, config);
   const command = restorePipelineHost(s3Remote(target.dest, run.location), {
     host: server.host,
     port: server.port,
     user: owner.username,
-    password: openStr(owner.passwordSecretRef, config),
+    password: dbPassword,
     database: database.name,
   });
   const res = await runCommand("bash", ["-c", command], {
@@ -526,11 +528,17 @@ export async function restoreBackupRun(
     env: BACKUP_EXEC_ENV,
   });
   if (res.code !== 0) {
-    const tail = res.lines
-      .filter((l) => l.stream === "stderr")
-      .slice(-5)
-      .map((l) => l.line)
-      .join("\n");
+    // Scrub S3 + DB credentials from stderr before returning it (M4).
+    const redact = makeRedactor(
+      new Set([target.dest.secretAccessKey, target.dest.accessKeyId, dbPassword]),
+    );
+    const tail = redact(
+      res.lines
+        .filter((l) => l.stream === "stderr")
+        .slice(-5)
+        .map((l) => l.line)
+        .join("\n"),
+    );
     return { ok: false, error: `restore failed (exit ${res.code})${tail ? `: ${tail}` : ""}` };
   }
   return { ok: true };

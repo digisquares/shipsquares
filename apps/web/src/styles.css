@@ -54,6 +54,9 @@
   --z-rail: 30;
   --z-topbar: 35;
   --z-dropdown: 45;
+  /* mobile nav drawer + its scrim: above the topbar/dropdowns, below modal
+     dialogs (--z-overlay) so a confirm still layers over an open drawer. */
+  --z-drawer: 48;
   --z-overlay: 50;
   --z-toast: 60;
 }
@@ -990,6 +993,26 @@ summary:focus-visible,
 .empty-action {
   margin-top: 12px;
 }
+/* Failed-load state — mirrors .empty with a fail-tone mark (error-state.tsx). */
+.error-state {
+  text-align: center;
+  padding: 36px 12px;
+}
+.error-state-mark {
+  width: 40px;
+  height: 40px;
+  margin: 0 auto 12px;
+  border-radius: 10px;
+  border: 1px dashed color-mix(in srgb, var(--fail) 50%, var(--border));
+  background: color-mix(in srgb, var(--fail) 10%, transparent);
+}
+.error-state-title {
+  font-weight: 600;
+  margin: 0 0 2px;
+}
+.error-state-action {
+  margin-top: 12px;
+}
 
 /* ---- onboarding checklist (25-design-system.md, flow 1) ---- */
 .onboarding-steps {
@@ -1691,6 +1714,18 @@ summary:focus-visible,
   flex-direction: column;
   gap: 14px;
   padding: 6px 0;
+}
+/* App-detail whole-page loading (content-shaped, replaces the old bare spinner). */
+.app-detail-loading {
+  max-width: var(--content-max, 1200px);
+  margin: 0 auto;
+  padding: 24px;
+}
+/* Cursor "Load more" affordance under a paginated list (activity feed). */
+.load-more {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0 4px;
 }
 .skeleton-row {
   display: flex;

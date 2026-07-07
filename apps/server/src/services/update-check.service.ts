@@ -7,6 +7,7 @@ import type PgBoss from "pg-boss";
 
 import type { Db } from "../db/index.js";
 import { updateSettings, updateState } from "../db/schema/index.js";
+import { swallow } from "../lib/swallow.js";
 import { getAppVersion } from "../lib/version.js";
 
 // Update-check (auto-update.md · Phase 1, notify-only). A pg-boss cron fetches the
@@ -309,5 +310,5 @@ export async function bootUpdateCheck(db: Db, config: Env, boss: PgBoss): Promis
     await checkForUpdate(db, config);
   });
   // Best-effort initial check; never blocks or fails boot.
-  void checkForUpdate(db, config).catch(() => undefined);
+  void checkForUpdate(db, config).catch((e) => swallow("update.initial_check", e));
 }

@@ -45,7 +45,7 @@ export function RepoPicker({ onPick }: { onPick: (repo: RepoRef, connectionId: s
   if (conns.length === 0) {
     return (
       <p className="muted repo-picker-empty">
-        No git connections yet. <a href="#/settings">Connect a provider</a> to pick a repo.
+        No git connections yet. <a href="#/admin/connections">Connect a provider</a> to pick a repo.
       </p>
     );
   }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { generateApiKey, hashApiKey, parseBearer } from "./api-key-core.js";
+import { apiKeyDenied, generateApiKey, hashApiKey, parseBearer } from "./api-key-core.js";
 
 describe("api key core", () => {
   it("generates ss_live_ tokens with 48 hex chars of entropy and their hash", () => {
@@ -24,5 +24,18 @@ describe("api key core", () => {
     expect(parseBearer("Bearer not-our-token")).toBeNull();
     expect(parseBearer("Basic abc")).toBeNull();
     expect(parseBearer(undefined)).toBeNull();
+  });
+
+  it("apiKeyDenied refuses revoked and expired keys, allows live ones (S3)", () => {
+    const now = new Date("2026-07-03T12:00:00Z");
+    const past = new Date("2026-07-01T00:00:00Z");
+    const future = new Date("2026-08-01T00:00:00Z");
+    expect(apiKeyDenied({ revokedAt: null, expiresAt: null }, now)).toBeNull();
+    expect(apiKeyDenied({ revokedAt: null, expiresAt: future }, now)).toBeNull();
+    expect(apiKeyDenied({ revokedAt: null, expiresAt: past }, now)).toBe("expired");
+    expect(apiKeyDenied({ revokedAt: null, expiresAt: now }, now)).toBe("expired"); // boundary
+    expect(apiKeyDenied({ revokedAt: past, expiresAt: null }, now)).toBe("revoked");
+    // revocation wins even when the key is also past expiry
+    expect(apiKeyDenied({ revokedAt: past, expiresAt: past }, now)).toBe("revoked");
   });
 });

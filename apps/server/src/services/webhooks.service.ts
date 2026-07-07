@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm";
 import type { Db } from "../db/index.js";
 import { apps, inboundWebhooks, vcsAppRegistrations, vcsConnections } from "../db/schema/index.js";
 import { executeDeploy } from "../deploy/executor.js";
+import { swallow } from "../lib/swallow.js";
 import { loadMasterKey, open, seal } from "../secrets/crypto.js";
 import type { SealedValue } from "../secrets/types.js";
 import { openSecretRef } from "../vcs/provider-deps.js";
@@ -248,7 +249,7 @@ export async function handleInbound(
   }
   // Inline (this service has no queue handle) — the boot sweep only reaps
   // running rows, so an inline run dying with the process is recorded failed.
-  void executeDeploy(db, dep.id).catch(() => undefined);
+  void executeDeploy(db, dep.id).catch((e) => swallow("webhook.inline_deploy", e));
   return {
     status: 202,
     body: { deploymentId: dep.id, branch: event.branch, commit: event.commit },
@@ -388,7 +389,7 @@ export async function handleAppInbound(
     if (!parsed.branch || parsed.branch !== a.branch) continue;
     try {
       const dep = await createDeployment(db, reg.organizationId, a.id, { trigger: "push" });
-      void executeDeploy(db, dep.id).catch(() => undefined);
+      void executeDeploy(db, dep.id).catch((e) => swallow("webhook.inline_deploy", e));
       deployed.push(dep.id);
     } catch (err) {
       // A push during an active deploy is acknowledged (serialization), not errored.

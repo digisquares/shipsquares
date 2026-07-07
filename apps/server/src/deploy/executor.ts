@@ -24,6 +24,7 @@ import { computeTrim } from "../deployment-logs/trim.js";
 import { parsePortMapping } from "../docker/ports.js";
 import { selectImagesToPrune } from "../docker/prune.js";
 import { dockerLoginCommand, dockerLogoutCommand } from "../docker/registry-auth.js";
+import { swallow } from "../lib/swallow.js";
 import { convergeProxy } from "../proxy/caddy/converge.js";
 import { logBus } from "../realtime/bus.js";
 import { resolveDeployEnv } from "../services/env.service.js";
@@ -117,7 +118,7 @@ export async function removeAppProject(appId: string): Promise<void> {
     containerName(appId),
     "down",
     "--remove-orphans",
-  ]).catch(() => undefined);
+  ]).catch((e) => swallow("deploy.compose_down", e));
 }
 
 /** Remove all of an app's SINGLE-RUN containers (by our label — compose
@@ -315,7 +316,7 @@ export async function executeDeploy(
         if (loggedOutOf !== null) {
           await runCommand("bash", ["-c", dockerLogoutCommand(loggedOutOf)], {
             timeoutMs: 30_000,
-          }).catch(() => undefined);
+          }).catch((e) => swallow("deploy.docker_logout", e));
         }
       }
       if (pull.code !== 0) {
@@ -630,8 +631,9 @@ export async function executeDeploy(
     // isolated so a missing Caddy/domain never fails an otherwise-good deploy.
     try {
       await convergeProxy(db, loadConfig());
-    } catch {
-      /* no caddy reachable or no domain yet — the deploy still succeeded */
+    } catch (e) {
+      // no caddy reachable or no domain yet — the deploy still succeeded
+      swallow("deploy.swap_converge", e);
     }
     if (opts.preview) {
       // Previews never sweep the app's containers (that would kill the main
@@ -646,7 +648,7 @@ export async function executeDeploy(
             eq(previewEnvironments.prNumber, opts.preview.prNumber),
           ),
         );
-      await convergeProxy(db, cfg).catch(() => undefined);
+      await convergeProxy(db, cfg).catch((e) => swallow("deploy.preview_converge", e));
       const { postPreviewComment } = await import("../previews/comments.js");
       const domain = (
         await db
@@ -683,8 +685,8 @@ export async function executeDeploy(
       for (const stale of selectImagesToPrune(candidates, app.imagesToKeep, tag)) {
         await runCommand("docker", ["rmi", stale]);
       }
-    } catch {
-      /* retention is best-effort */
+    } catch (e) {
+      swallow("deploy.image_prune", e);
     }
   } catch (err) {
     // A cancel request (signal aborted) finalizes as cancelled, not failed —
@@ -737,10 +739,12 @@ export async function executeDeploy(
         .update(deployments)
         .set({ logLineCount: Math.min(total, LOG_LINE_CAP), logTruncated: trim.truncated })
         .where(eq(deployments.id, deploymentId));
-    } catch {
-      /* bookkeeping is best-effort */
+    } catch (e) {
+      swallow("deploy.log_bookkeeping", e);
     }
-    await rm(workdir, { recursive: true, force: true }).catch(() => undefined);
+    await rm(workdir, { recursive: true, force: true }).catch((e) =>
+      swallow("deploy.workdir_cleanup", e),
+    );
   }
 }
 
@@ -865,16 +869,21 @@ async function composeUp(args: ComposeUpArgs): Promise<void> {
     })
     .where(eq(deployments.id, deploymentId));
   logBus.publishStatus(deploymentId, "succeeded");
-  void notifyDeploymentOutcome(db, cfg, deploymentId, "deploy.succeeded").catch(() => undefined);
-  void dispatchDeploymentOutcome(db, cfg, deploymentId, "deploy.succeeded").catch(() => undefined);
+  void notifyDeploymentOutcome(db, cfg, deploymentId, "deploy.succeeded").catch((e) =>
+    swallow("deploy.notify", e),
+  );
+  void dispatchDeploymentOutcome(db, cfg, deploymentId, "deploy.succeeded").catch((e) =>
+    swallow("deploy.dispatch", e),
+  );
 
   try {
     await convergeProxy(db, cfg);
-  } catch {
-    /* no caddy reachable or no domain yet — the deploy still succeeded */
+  } catch (e) {
+    // no caddy reachable or no domain yet — the deploy still succeeded
+    swallow("deploy.converge", e);
   }
   // An app that switched single-container → compose leaves its old labeled
   // container behind; compose containers carry only compose's project label,
   // so this touches nothing the project owns.
-  await removeAppContainers(app.id).catch(() => undefined);
+  await removeAppContainers(app.id).catch((e) => swallow("deploy.remove_old_containers", e));
 }

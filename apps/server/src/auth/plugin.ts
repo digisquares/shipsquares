@@ -1,9 +1,12 @@
 import fp from "fastify-plugin";
 
 import { requestBaseUrl } from "../lib/cors-origins.js";
+import { swallow } from "../lib/swallow.js";
+import { DEFAULT_RATE_LIMIT } from "../plugins/security.js";
 import { requirePermission } from "../rbac/require-permission.js";
 
 import { buildAuth } from "./better-auth.js";
+import { authRateMax } from "./rate-tier.js";
 import { ANON, resolveContext } from "./resolver.js";
 import { ssoProviders } from "./sso.js";
 
@@ -22,6 +25,17 @@ export const authPlugin = fp(async (app) => {
   app.route({
     method: ["GET", "POST"],
     url: "/auth/*",
+    // S5: credential-submitting auth endpoints (sign-in/up, 2FA, password reset)
+    // get a tight per-IP budget instead of the coarse global 1000/min; reads like
+    // /auth/get-session keep the default so session polling isn't throttled. A
+    // per-route override only applies when the rate-limit plugin is registered
+    // (production); it's a harmless no-op in app.inject tests without it.
+    config: {
+      rateLimit: {
+        timeWindow: "1 minute",
+        max: (req: { url: string }) => authRateMax(req.url, DEFAULT_RATE_LIMIT),
+      },
+    },
     async handler(req, reply) {
       // Build the auth Request on the host the browser actually used (not
       // AUTH_URL) so same-origin login works at any reachable host.
@@ -58,7 +72,11 @@ export const authPlugin = fp(async (app) => {
   app.addHook("onRequest", async (req) => {
     try {
       req.ctx = await resolveContext(auth, req);
-    } catch {
+    } catch (err) {
+      // resolveContext returns ANON for anonymous requests, so a throw here is a
+      // real fault (session store / DB) — log before downgrading, else it looks
+      // like a spurious 401/403 to the caller.
+      swallow("auth.resolve", err);
       req.ctx = ANON;
     }
   });

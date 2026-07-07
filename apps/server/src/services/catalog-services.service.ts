@@ -13,6 +13,7 @@ import { getTemplateCompose, loadCatalog } from "../catalog/templates.js";
 import type { Db } from "../db/index.js";
 import { catalogServices } from "../db/schema/index.js";
 import { runCommand } from "../deploy/exec.js";
+import { swallow } from "../lib/swallow.js";
 
 // One-click catalog installs (17): mint the magic env, write the compose
 // project (compose.yml + .env) under SS_BUILDS_DIR, `docker compose up -d` it
@@ -120,7 +121,7 @@ export async function installCatalogService(
         .update(catalogServices)
         .set({ status: "failed", error: e instanceof Error ? e.message : String(e) })
         .where(eq(catalogServices.id, id))
-        .catch(() => undefined);
+        .catch((err) => swallow("catalog.mark_failed", err));
     }
   })();
 

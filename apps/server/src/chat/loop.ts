@@ -124,10 +124,18 @@ const MAX_TOOL_RESULT_CHARS = 8000;
 
 /** Fence + size-cap a tool result before it re-enters the model. Pure. The raw,
  *  unfenced text is still surfaced to the user via `ToolEvent.result`; only the
- *  copy fed back to the model is wrapped. */
+ *  copy fed back to the model is wrapped.
+ *
+ *  Tool output is the most attacker-reachable channel (deploy/build logs, DB
+ *  rows), so a literal `</untrusted-tool-output>` inside the body would break out
+ *  of the fence and land as apparent system context. We defang the fence token
+ *  (both directions) before wrapping — the same reason `sanitizeForPrompt` strips
+ *  angle brackets from stored memory/activity/page-context. Newlines are kept so
+ *  multi-line logs stay readable to the model. */
 export function fenceToolResult(text: string, max = MAX_TOOL_RESULT_CHARS): string {
-  const body =
+  const capped =
     text.length > max ? `${text.slice(0, max)}\n…[truncated ${text.length - max} chars]` : text;
+  const body = capped.replace(/<\/?untrusted-tool-output>/gi, "[fence-marker-removed]");
   return `<untrusted-tool-output>\n${body}\n</untrusted-tool-output>`;
 }
 

@@ -19,6 +19,16 @@ export function memberChangeCheck(input: {
   if (input.targetRole === "owner" && input.actorRole !== "owner") {
     return { ok: false, code: "member.owner_requires_owner" };
   }
+  // Privilege-escalation floor (mirrors inviteRoleAllowed): only an owner may
+  // grant owner/admin. Without this an admin could PATCH any member — including
+  // themselves — up to owner and seize org:delete.
+  if (
+    input.newRole &&
+    (input.newRole === "owner" || input.newRole === "admin") &&
+    input.actorRole !== "owner"
+  ) {
+    return { ok: false, code: "member.role_ceiling" };
+  }
   const demotesOwner = input.targetRole === "owner" && input.newRole !== "owner";
   if (demotesOwner && input.ownerCount <= 1) {
     return { ok: false, code: "member.last_owner" };

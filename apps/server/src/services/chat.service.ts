@@ -25,6 +25,7 @@ import {
 } from "../chat/memory.js";
 import { PROPOSE_PLAN_TOOL } from "../chat/planning.js";
 import { sanitizeForPrompt } from "../chat/prompt-safety.js";
+import { redactToolEventsForStorage } from "../chat/redact.js";
 import {
   GUIDED_TEMPLATE_TOOL,
   GUIDED_TEMPLATE_TOOL_NAME,
@@ -34,6 +35,7 @@ import { pickCategories } from "../chat/tool-picker.js";
 import type { Db } from "../db/index.js";
 import { aiSettings, conversations, messages } from "../db/schema/index.js";
 import type { RequestContext } from "../lib/ctx.js";
+import { swallow } from "../lib/swallow.js";
 import { MCP_TOOLS, buildRestCall, findTool, toolRisk, toolsForCategories } from "../mcp/tools.js";
 import type { ToolRisk } from "../mcp/tools.js";
 import { checkPermission } from "../rbac/require-permission.js";
@@ -491,7 +493,7 @@ export async function chatTurn(
     await app.db
       .delete(messages)
       .where(eq(messages.id, userMsgId))
-      .catch(() => undefined);
+      .catch((e) => swallow("chat.rollback_user_turn", e));
     throw new AppError(`AI provider error: ${err instanceof Error ? err.message : String(err)}`, {
       status: 502,
       code: "ai.provider_error",
@@ -504,8 +506,15 @@ export async function chatTurn(
     ordinal,
     role: "assistant",
     content: result.text,
+    // Persist a secret-scrubbed copy (H4): the un-redacted events already went to
+    // the requesting owner via the live stream / return value ("shown once").
     ...(result.toolEvents.length
-      ? { toolEvents: result.toolEvents as unknown as Record<string, unknown>[] }
+      ? {
+          toolEvents: redactToolEventsForStorage(result.toolEvents) as unknown as Record<
+            string,
+            unknown
+          >[],
+        }
       : {}),
   });
   await app.db

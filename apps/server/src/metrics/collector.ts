@@ -6,6 +6,7 @@ import { and, eq, gte, isNull, lt } from "drizzle-orm";
 import type { Db } from "../db/index.js";
 import { metricAlerts, metricSamples } from "../db/schema/index.js";
 import { runCommand } from "../deploy/exec.js";
+import { swallow } from "../lib/swallow.js";
 import { dispatchOutbound } from "../services/outbound-webhooks.service.js";
 
 import { evaluateAlert } from "./alerts.js";
@@ -20,6 +21,8 @@ import { hostCpuPct, parseDfRoot, parseDockerStatsLine } from "./stats-parse.js"
 
 const INTERVAL_MS = 60_000;
 const RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+// Cap each df/docker probe so a hung daemon can't stack children every 60s (M7).
+const PROBE_TIMEOUT_MS = 20_000;
 
 interface ContainerOwner {
   id: string;
@@ -46,7 +49,11 @@ async function collectOnce(db: Db): Promise<void> {
 
   // ── host sample (the control server; serverId null = this host) ──────────
   const df = parseDfRoot(
-    (await runCommand("df", ["-kP", "/"]).catch(() => ({ lines: [] }))).lines
+    (
+      await runCommand("df", ["-kP", "/"], { timeoutMs: PROBE_TIMEOUT_MS }).catch(() => ({
+        lines: [],
+      }))
+    ).lines
       .filter((l) => l.stream === "stdout")
       .map((l) => l.line)
       .join("\n"),
@@ -61,20 +68,22 @@ async function collectOnce(db: Db): Promise<void> {
   });
 
   // ── per-app container samples (one ps + one batched stats call) ──────────
-  const ps = await runCommand("docker", [
-    "ps",
-    "--format",
-    '{{.ID}}\t{{.Label "shipsquares.app"}}\t{{.Label "com.docker.compose.project"}}',
-  ]).catch(() => ({ lines: [] as { stream: string; line: string }[] }));
+  const ps = await runCommand(
+    "docker",
+    [
+      "ps",
+      "--format",
+      '{{.ID}}\t{{.Label "shipsquares.app"}}\t{{.Label "com.docker.compose.project"}}',
+    ],
+    { timeoutMs: PROBE_TIMEOUT_MS },
+  ).catch(() => ({ lines: [] as { stream: string; line: string }[] }));
   const owners = ownersFromPs(ps.lines.filter((l) => l.stream === "stdout").map((l) => l.line));
   if (owners.length) {
-    const stats = await runCommand("docker", [
-      "stats",
-      "--no-stream",
-      "--format",
-      "{{json .}}",
-      ...owners.map((o) => o.id),
-    ]).catch(() => ({ lines: [] as { stream: string; line: string }[] }));
+    const stats = await runCommand(
+      "docker",
+      ["stats", "--no-stream", "--format", "{{json .}}", ...owners.map((o) => o.id)],
+      { timeoutMs: PROBE_TIMEOUT_MS },
+    ).catch(() => ({ lines: [] as { stream: string; line: string }[] }));
     const byId = new Map(owners.map((o) => [o.id, o.appId]));
     // docker truncates ids in stats output — match by prefix.
     const perApp = new Map<string, { cpu: number; mem: number; limit: number }>();
@@ -108,7 +117,7 @@ async function collectOnce(db: Db): Promise<void> {
   await db
     .delete(metricSamples)
     .where(lt(metricSamples.ts, new Date(now.getTime() - RETENTION_MS)))
-    .catch(() => undefined);
+    .catch((e) => swallow("metrics.retention_trim", e));
 }
 
 /** Evaluate every enabled alert against its window; fire → outbound webhooks
@@ -178,18 +187,30 @@ export async function evaluateAlerts(db: Db, config: Env): Promise<void> {
       },
       observedAvgPct: Math.round(avg * 10) / 10,
       at: new Date(now).toISOString(),
-    }).catch(() => undefined);
+    }).catch((e) => swallow("metrics.alert_dispatch", e));
   }
 }
 
 /** Boot the 60s collect→trim→evaluate loop. Returns a stop function. */
 export function startCollector(db: Db, config: Env): () => void {
+  // Overlap guard: if a tick runs long (slow docker/df/DB), skip the next one
+  // rather than stacking concurrent collections (M7).
+  let running = false;
   const tick = async (): Promise<void> => {
+    if (running) {
+      swallow("metrics.tick", new Error("previous collection still running — skipping this tick"));
+      return;
+    }
+    running = true;
     try {
       await collectOnce(db);
       await evaluateAlerts(db, config);
-    } catch {
-      // best-effort: a failed tick must never crash the control plane
+    } catch (err) {
+      // best-effort: a failed tick must never crash the control plane — but a
+      // persistently failing collector shouldn't be silent either.
+      swallow("metrics.tick", err);
+    } finally {
+      running = false;
     }
   };
   void tick();

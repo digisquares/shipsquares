@@ -42,16 +42,20 @@ describe("publication / subscription SQL (logical replication)", () => {
     expect(sql).toContain('CREATE SUBSCRIPTION "ss_sub_rpl_1"');
     expect(sql).toContain("CONNECTION '");
     expect(sql).toContain('PUBLICATION "ss_pub_rpl_1"');
-    // the embedded password's quote is doubled inside the SQL string literal
-    expect(sql).toContain("password=p w''x");
+    // libpq-quoted value: password='p w\'x' → SQL-literal doubling of every quote
+    expect(sql).toContain("password=''p w\\''x''");
     expect(dropSubscriptionSql("rpl_1")).toBe('DROP SUBSCRIPTION IF EXISTS "ss_sub_rpl_1";');
   });
 });
 
 describe("replicationConnString", () => {
-  it("builds a libpq keyword/value conninfo", () => {
+  it("libpq-quotes every value so spaces/quotes can't break or inject conninfo", () => {
     expect(replicationConnString(target)).toBe(
-      "host=10.0.0.5 port=5432 user=shop_app password=p w'x dbname=shop",
+      "host='10.0.0.5' port='5432' user='shop_app' password='p w\\'x' dbname='shop'",
     );
+  });
+
+  it("escapes a backslash in a value", () => {
+    expect(replicationConnString({ ...target, password: "a\\b" })).toContain("password='a\\\\b'");
   });
 });

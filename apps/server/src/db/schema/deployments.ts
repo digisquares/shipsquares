@@ -47,6 +47,13 @@ export const deployments = pgTable(
     appIdx: index("deployments_app_idx").on(t.appId),
     orgStatusIdx: index("deployments_org_status_idx").on(t.organizationId, t.status),
     appQueuedIdx: index("deployments_app_queued_idx").on(t.appId, t.queuedAt),
+    // Covers the latest-succeeded lookup the reconcile + git-poll sweeps run
+    // per app: WHERE app_id=? AND status='succeeded' ORDER BY finished_at DESC.
+    appStatusFinishedIdx: index("deployments_app_status_finished_idx").on(
+      t.appId,
+      t.status,
+      t.finishedAt,
+    ),
     // Per-app serialization: at most one queued|running deployment per
     // app — the airtight backstop for the create-time check under races.
     oneActivePerApp: uniqueIndex("deployments_one_active_per_app")

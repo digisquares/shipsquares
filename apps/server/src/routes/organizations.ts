@@ -1,10 +1,12 @@
 import type { FastifyPluginAsyncTypebox } from "@fastify/type-provider-typebox";
 import { Type as T } from "@sinclair/typebox";
-import { AppError, UnauthorizedError } from "@ss/shared";
+import { NotFoundError, UnauthorizedError } from "@ss/shared";
 
 import { rawSession } from "../auth/resolver.js";
-import { ListQuery, Page, Problem } from "../schemas/common.js";
+import { getOrgId } from "../lib/ctx.js";
+import { Problem } from "../schemas/common.js";
 import * as membersService from "../services/members.service.js";
+import * as organizationsService from "../services/organizations.service.js";
 
 const Organization = T.Object({
   id: T.String(),
@@ -13,51 +15,17 @@ const Organization = T.Object({
   createdAt: T.String({ format: "date-time" }),
 });
 
-const CreateOrg = T.Object(
-  {
-    name: T.String({ minLength: 1, maxLength: 100 }),
-    slug: T.String({ minLength: 1, maxLength: 63, pattern: "^[a-z0-9-]+$" }),
-  },
-  { additionalProperties: false },
-);
-
 const UpdateOrg = T.Partial(T.Object({ name: T.String({ minLength: 1, maxLength: 100 }) }), {
   additionalProperties: false,
 });
 
 const IdParam = T.Object({ id: T.String() });
 
-function notImplemented(): never {
-  throw new AppError("not implemented", { status: 501, code: "not_implemented" });
-}
-
+// Read/rename the caller's own org. `:id` must be the session's active org (the
+// switcher activates a different one) — a mismatch 404s rather than leaking that
+// another org exists, mirroring the per-service tenant-isolation pattern. Org
+// create/list-all/delete are intentionally not exposed (see organizations.service).
 export const organizationsRoutes: FastifyPluginAsyncTypebox = async (app) => {
-  app.get(
-    "/organizations",
-    {
-      schema: {
-        tags: ["organizations"],
-        querystring: ListQuery,
-        response: { 200: Page(Organization) },
-      },
-      preHandler: app.requirePermission("org:read"),
-    },
-    notImplemented,
-  );
-
-  app.post(
-    "/organizations",
-    {
-      schema: {
-        tags: ["organizations"],
-        body: CreateOrg,
-        response: { 201: Organization, 409: Problem },
-      },
-      preHandler: app.requirePermission("org:write"),
-    },
-    notImplemented,
-  );
-
   app.get(
     "/organizations/:id",
     {
@@ -68,7 +36,11 @@ export const organizationsRoutes: FastifyPluginAsyncTypebox = async (app) => {
       },
       preHandler: app.requirePermission("org:read"),
     },
-    notImplemented,
+    async (req) => {
+      const orgId = getOrgId(req);
+      if (req.params.id !== orgId) throw new NotFoundError("organization not found");
+      return organizationsService.getOrganization(app.db, orgId);
+    },
   );
 
   app.patch(
@@ -78,22 +50,15 @@ export const organizationsRoutes: FastifyPluginAsyncTypebox = async (app) => {
         tags: ["organizations"],
         params: IdParam,
         body: UpdateOrg,
-        response: { 200: Organization },
+        response: { 200: Organization, 404: Problem },
       },
       preHandler: app.requirePermission("org:write"),
     },
-    notImplemented,
-  );
-
-  app.delete(
-    "/organizations/:id",
-    {
-      schema: { tags: ["organizations"], params: IdParam, response: { 204: T.Null() } },
-      // Deliberately org:delete (owner-only in the matrix) — org:write would hand
-      // deletion to admins the moment this is implemented.
-      preHandler: app.requirePermission("org:delete"),
+    async (req) => {
+      const orgId = getOrgId(req);
+      if (req.params.id !== orgId) throw new NotFoundError("organization not found");
+      return organizationsService.updateOrganization(app.db, orgId, req.body);
     },
-    notImplemented,
   );
 
   // ── Org switcher (R3.1) — session-authed, independent of the active org ───

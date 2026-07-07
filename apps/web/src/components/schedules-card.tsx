@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { api } from "../lib/api";
 import { confirm } from "../lib/confirm";
 import { relativeTime } from "../lib/time";
 import { toast } from "../lib/toast";
+import { useResource } from "../lib/use-resource";
 
 import { EmptyState } from "./empty-state";
+import { ErrorState } from "./error-state";
+import { Field, TextInput } from "./form";
 import { SkeletonRows } from "./skeleton";
 
 // Scheduled jobs card (ROADMAP R1.5): the first web surface for /schedules —
@@ -34,7 +37,10 @@ interface ScheduleRun {
 }
 
 export function SchedulesCard({ appId }: { appId: string }) {
-  const [schedules, setSchedules] = useState<Schedule[] | null>(null);
+  const { data, loading, error, reload } = useResource(() =>
+    api.get<Schedule[]>("/api/v1/schedules"),
+  );
+  const schedules = data ? data.filter((s) => s.appId === appId) : null;
   const [lastRuns, setLastRuns] = useState<Record<string, ScheduleRun | undefined>>({});
   const [openTail, setOpenTail] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -42,26 +48,23 @@ export function SchedulesCard({ appId }: { appId: string }) {
   const [command, setCommand] = useState("");
   const [creating, setCreating] = useState(false);
 
-  const load = useCallback(async () => {
-    const r = await api.get<Schedule[]>("/api/v1/schedules");
-    if (!r.ok) {
-      setSchedules([]);
-      return;
-    }
-    const mine = r.data.filter((s) => s.appId === appId);
-    setSchedules(mine);
-    const runs: Record<string, ScheduleRun | undefined> = {};
-    await Promise.all(
+  // Last run per (this app's) schedule — fanned out when the list resolves.
+  useEffect(() => {
+    if (!data) return;
+    const mine = data.filter((s) => s.appId === appId);
+    let alive = true;
+    void Promise.all(
       mine.map(async (s) => {
         const rr = await api.get<ScheduleRun[]>(`/api/v1/schedules/${s.id}/runs`);
-        if (rr.ok) runs[s.id] = rr.data[0];
+        return [s.id, rr.ok ? rr.data[0] : undefined] as const;
       }),
-    );
-    setLastRuns(runs);
-  }, [appId]);
-  useEffect(() => {
-    void load();
-  }, [load]);
+    ).then((entries) => {
+      if (alive) setLastRuns(Object.fromEntries(entries));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [data, appId]);
 
   async function create() {
     setCreating(true);
@@ -77,7 +80,7 @@ export function SchedulesCard({ appId }: { appId: string }) {
       toast.success("Schedule created");
       setName("");
       setCommand("");
-      await load();
+      reload();
     } else {
       toast.error(`Create failed (${r.status}) — check the cron expression`);
     }
@@ -87,7 +90,7 @@ export function SchedulesCard({ appId }: { appId: string }) {
     const r = await api.post(`/api/v1/schedules/${s.id}/run`);
     if (r.ok) {
       toast.success(`Running "${s.name}" — refresh in a few seconds`);
-      setTimeout(() => void load(), 4000);
+      setTimeout(() => reload(), 4000);
     } else {
       toast.error(`Run failed (${r.status})`);
     }
@@ -103,7 +106,7 @@ export function SchedulesCard({ appId }: { appId: string }) {
     const r = await api.del(`/api/v1/schedules/${s.id}`);
     if (r.ok) {
       toast.success("Schedule deleted");
-      await load();
+      reload();
     } else {
       toast.error(`Delete failed (${r.status})`);
     }
@@ -119,35 +122,31 @@ export function SchedulesCard({ appId }: { appId: string }) {
       </p>
 
       <div className="form-row">
-        <label className="field">
-          <span className="field-label">Name</span>
-          <input
-            className="chat-input"
+        <Field label="Name">
+          <TextInput
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="nightly-cleanup"
             maxLength={80}
           />
-        </label>
-        <label className="field">
-          <span className="field-label">Cron (5-field, UTC)</span>
-          <input
-            className="chat-input mono"
+        </Field>
+        <Field label="Cron (5-field, UTC)">
+          <TextInput
+            className="mono"
             value={cron}
             onChange={(e) => setCron(e.target.value)}
             placeholder="0 3 * * *"
           />
-        </label>
-        <label className="field">
-          <span className="field-label">Command</span>
-          <input
-            className="chat-input mono"
+        </Field>
+        <Field label="Command">
+          <TextInput
+            className="mono"
             value={command}
             onChange={(e) => setCommand(e.target.value)}
             placeholder="node scripts/cleanup.js"
             maxLength={4096}
           />
-        </label>
+        </Field>
         <div className="card-actions key-create-action">
           <button
             className="btn btn-primary btn-sm"
@@ -159,11 +158,11 @@ export function SchedulesCard({ appId }: { appId: string }) {
         </div>
       </div>
 
-      {schedules === null ? (
+      {loading && !data ? (
         <SkeletonRows count={2} />
-      ) : schedules.length === 0 ? (
-        <EmptyState title="No schedules" description="Add a cron command above." />
-      ) : (
+      ) : error ? (
+        <ErrorState title="Couldn't load schedules" message={error} onRetry={reload} />
+      ) : schedules && schedules.length > 0 ? (
         <ul className="app-list">
           {schedules.map((s) => {
             const run = lastRuns[s.id];
@@ -206,6 +205,8 @@ export function SchedulesCard({ appId }: { appId: string }) {
             );
           })}
         </ul>
+      ) : (
+        <EmptyState title="No schedules" description="Add a cron command above." />
       )}
     </section>
   );

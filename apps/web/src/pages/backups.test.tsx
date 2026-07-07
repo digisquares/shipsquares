@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { expectNoA11yViolations, renderComponent } from "../test/component";
@@ -19,6 +19,23 @@ const mockConfigs = (configs: unknown[]) => {
     json: async () => configs,
   }) as unknown as typeof fetch;
 };
+
+const oneConfig = [
+  {
+    id: "bkc_1",
+    serverId: "dbs_1",
+    databaseId: "db_1",
+    type: "logical",
+    schedule: "0 3 * * *",
+    walArchive: false,
+    keepNewest: 14,
+    retentionDays: 14,
+    enabled: true,
+    lastWalAt: null,
+    nextRunAt: null,
+    lastRun: null,
+  },
+];
 
 describe("formatBytes", () => {
   it("renders human sizes and a dash for null", () => {
@@ -61,5 +78,23 @@ describe("Backups (component)", () => {
     mockConfigs([]);
     renderComponent(<Backups />);
     expect(await screen.findByText("No backup configs")).toBeTruthy();
+  });
+
+  it("shows an error state with Retry on failure — never a masquerading empty — and recovers", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 500, json: async () => null })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => oneConfig,
+      }) as unknown as typeof fetch;
+    const { container } = renderComponent(<Backups />);
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByText(/couldn't load backups/i)).toBeTruthy();
+    expect(screen.queryByText("No backup configs")).toBeNull();
+    await expectNoA11yViolations(container);
+    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+    expect(await screen.findByText("db_1")).toBeTruthy();
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { Api } from "./api.js";
-import { parseArgs } from "./args.js";
+import { VALUE_FLAGS, parseArgs } from "./args.js";
 import { runApps, runDeploy, runLogs, runStatus } from "./commands.js";
 
 function fakeApi(over: Partial<Api> = {}): Api {
@@ -62,6 +62,38 @@ describe("commands", () => {
     vi.useRealTimers();
     expect(r.exitCode).toBe(1);
     expect(r.output).toContain("failed");
+  });
+
+  it("treats --timeout as a value flag (regression: it was silently dropped)", () => {
+    expect(VALUE_FLAGS).toContain("timeout");
+    const args = parseArgs(["deploy", "app_1", "--wait", "--timeout", "5"], VALUE_FLAGS);
+    expect(args.flags.timeout).toBe("5"); // a value, not boolean `true`
+    expect(args.positionals).toEqual(["app_1"]); // "5" isn't a stray positional
+  });
+
+  it("deploy --wait honours --timeout as the poll budget", async () => {
+    // 5s budget / 2s interval → 2 polls before giving up (vs 300 at the 600s
+    // default the bug fell back to). A never-terminating deployment lets us
+    // count the polls to confirm the value flowed through.
+    const getDeployment = vi.fn().mockResolvedValue({
+      id: "dpl_9",
+      status: "running",
+      trigger: "manual",
+      commitAfter: null,
+      queuedAt: "",
+    });
+    const api = fakeApi({ deploy: vi.fn().mockResolvedValue({ id: "dpl_9" }), getDeployment });
+    vi.useFakeTimers();
+    const p = runDeploy(
+      api,
+      parseArgs(["deploy", "app_1", "--wait", "--timeout", "5"], VALUE_FLAGS),
+    );
+    await vi.runAllTimersAsync();
+    const r = await p;
+    vi.useRealTimers();
+    expect(r.exitCode).toBe(1);
+    expect(r.output).toContain("timeout");
+    expect(getDeployment).toHaveBeenCalledTimes(2);
   });
 
   it("logs renders newline-joined lines", async () => {

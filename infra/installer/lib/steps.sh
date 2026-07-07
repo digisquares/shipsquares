@@ -79,7 +79,11 @@ step_postgres() {
 step_bundle() {
   step 6 "bundle + caddy ($SS_VERSION)"
   local dest="$PREFIX/$SS_VERSION"
-  if [ ! -f "$dest/dist/index.js" ]; then
+  # A pinned version (sha/tag) is immutable — skip the download if it's already
+  # extracted. But the "latest" label is a MOVING target: a re-run to upgrade must
+  # re-fetch it, or it keeps the original install's stale dir (and step_units then
+  # repoints `current` at it — a silent downgrade on a box that has self-updated).
+  if [ "$SS_VERSION" = "latest" ] || [ ! -f "$dest/dist/index.js" ]; then
     install -d -o shipsquares -g shipsquares "$dest"
     local tgz="$DATA/bundle-$SS_VERSION.tgz"
     case "$BUNDLE_SRC" in
@@ -87,6 +91,7 @@ step_bundle() {
       *)                  cp "$BUNDLE_SRC" "$tgz" ;;
     esac
     tar xzf "$tgz" -C "$dest"
+    rm -f "$tgz"
     chown -R shipsquares:shipsquares "$dest"
   fi
   if ! command -v caddy >/dev/null 2>&1; then
@@ -100,6 +105,16 @@ step_bundle() {
 # 6 ── env file (non-secret config; DATABASE_URL/AUTH_SECRET live in secrets) --
 step_env() {
   step 7 "env file"
+  # Write the base config ONLY on first install. A re-run must NOT clobber the
+  # file: operators add optional keys here (ANTHROPIC_API_KEY, SMTP_URL,
+  # METRICS_TOKEN, SS_RELEASE_CHANNEL, …), and rewriting it would wipe those and
+  # recompute AUTH_URL to <ip>.sslip.io when --domain isn't repeated — breaking
+  # auth origins. (The "re-run repairs in place" contract means preserve, not
+  # overwrite.) To change the domain later, edit AUTH_URL in this file.
+  if [ -f "$ETC/env" ]; then
+    log "env file exists — preserving operator config ($ETC/env)"
+    return 0
+  fi
   cat > "$ETC/env" <<EOF
 NODE_ENV=production
 PORT=3000
@@ -130,10 +145,21 @@ step_units() {
   # Manifest-signing public key (auto-update.md Phase 3): present only once signing
   # is provisioned; the updater verifies the release manifest against it when found.
   [ -f "$here/updater/manifest-sign.pub" ] && install -m 0644 "$here/updater/manifest-sign.pub" "$PREFIX/manifest-sign.pub"
-  ln -sfn "$PREFIX/$SS_VERSION" "$PREFIX/current"
+  # Point `current` at this version. `ln -sfn` atomically replaces an existing
+  # *symlink*, but if `current` is a real directory (early installs left one) the
+  # link lands *inside* it and the swap silently no-ops — so clear a non-symlink
+  # first, then swap via a temp link + rename so a reader never sees a missing
+  # `current`.
+  [ -L "$PREFIX/current" ] || rm -rf "$PREFIX/current"
+  rm -rf "$PREFIX/current.tmp"
+  ln -sfn "$PREFIX/$SS_VERSION" "$PREFIX/current.tmp"
+  mv -Tf "$PREFIX/current.tmp" "$PREFIX/current"
   systemctl daemon-reload
-  systemctl enable --now shipsquares-caddy
-  systemctl enable --now shipsquares-updater.path
+  # enable (boot-start) + restart, NOT `enable --now`: on an upgrade re-run
+  # `--now` only *starts* a stopped unit and won't reload new code into a running
+  # one. `restart` starts if stopped and reloads if running — correct for both.
+  systemctl enable shipsquares-caddy shipsquares-updater.path
+  systemctl restart shipsquares-caddy shipsquares-updater.path
 }
 
 # 8b ── host firewall (a PaaS must expose 80/443; cloud SG is the operator's job)
@@ -166,7 +192,10 @@ step_migrate_seed() {
   else
     log "no --admin-email; create the first admin later (re-run with --admin-email)"
   fi
-  systemctl enable --now shipsquares
+  # enable + restart (not `enable --now`) so a re-run/upgrade loads the new bundle
+  # into the already-running control plane; on a fresh install `restart` starts it.
+  systemctl enable shipsquares
+  systemctl restart shipsquares
   verify_ready
 }
 

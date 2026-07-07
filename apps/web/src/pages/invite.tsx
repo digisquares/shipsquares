@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { api } from "../lib/api";
 import { useSession } from "../lib/auth";
@@ -13,9 +13,16 @@ export function InviteAccept({ token }: { token: string }) {
   const { data, isPending } = useSession();
   const [state, setState] = useState<"working" | "ok" | "error">("working");
   const [message, setMessage] = useState("Accepting your invite…");
+  // Accept exactly once per token. The session `data` object's identity changes on
+  // every better-auth refetch (window focus/visibility); without this guard a
+  // refocus during/after accept re-POSTs the single-use token → 409 → the UI would
+  // flip to "no longer valid" even though the join already succeeded.
+  const posted = useRef<string | null>(null);
 
   useEffect(() => {
     if (isPending || !data) return;
+    if (posted.current === token) return;
+    posted.current = token;
     let alive = true;
     void (async () => {
       const r = await api.post<{ organizationId: string; role: string }>(

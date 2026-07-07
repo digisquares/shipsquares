@@ -87,7 +87,13 @@ export function App() {
     ) : route.name === "mail" ? (
       <Mail />
     ) : route.name === "studio" ? (
-      <Suspense fallback={<div className="studio" aria-busy="true" />}>
+      <Suspense
+        fallback={
+          <div className="app-detail-loading" aria-busy="true" aria-label="Loading Database Studio">
+            <SkeletonRows count={6} />
+          </div>
+        }
+      >
         <Studio />
       </Suspense>
     ) : (

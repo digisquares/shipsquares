@@ -1,6 +1,7 @@
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { EmptyState } from "../components/empty-state";
+import { ErrorState } from "../components/error-state";
 import { Onboarding } from "../components/onboarding";
 import { Page } from "../components/page";
 import { RepoPicker } from "../components/repo-picker";
@@ -11,6 +12,7 @@ import { confirm } from "../lib/confirm";
 import { onboardingComplete, type OnboardingState } from "../lib/onboarding";
 import { pageTitle } from "../lib/page-title";
 import { toast } from "../lib/toast";
+import { useResource } from "../lib/use-resource";
 import { slugifyAppName, validateAppName } from "../lib/validate";
 import { parseWsFrame, wsUrl } from "../lib/ws";
 
@@ -31,9 +33,14 @@ interface Page<T> {
 }
 
 export function Dashboard() {
-  const [apps, setApps] = useState<AppRow[] | null>(null);
+  const {
+    data: appsData,
+    loading,
+    error,
+    reload,
+  } = useResource(() => api.get<Page<AppRow>>("/api/v1/apps"));
+  const apps = appsData?.data ?? null;
   const [deploys, setDeploys] = useState<Record<string, DeployState>>({});
-  const [note, setNote] = useState("");
   const [creating, setCreating] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState("");
@@ -47,34 +54,38 @@ export function Dashboard() {
   const setDeploy = (appId: string, status: string) =>
     setDeploys((s) => ({ ...s, [appId]: { status } }));
 
-  const load = useCallback(async () => {
-    try {
-      const r = await fetch("/api/v1/apps", { credentials: "include" });
-      if (!r.ok) {
-        setNote(`Apps API responded ${r.status}.`);
-        return;
-      }
-      const body = (await r.json()) as Page<AppRow>;
-      const list = body.data ?? [];
-      setApps(list);
-      setNote("");
-      // latest deployment status per app
-      for (const a of list) {
-        void fetch(`/api/v1/apps/${a.id}/deployments?limit=1`, { credentials: "include" })
-          .then((res) => (res.ok ? (res.json() as Promise<Page<{ status: string }>>) : null))
-          .then((p) => {
-            const d = p?.data?.[0];
-            if (d) setDeploy(a.id, d.status);
-          });
-      }
-    } catch {
-      setNote("Apps API unreachable.");
-    }
+  // Live deploy status over WebSocket — no polling (12-realtime-logs.md). The
+  // server pushes a `deployment` frame on each status transition (and at once if
+  // already terminal); we close on a terminal status or a 10-minute safety cap.
+  // Sockets are tied to the component lifetime, and a drop mid-deploy re-checks
+  // the status once so a row never freezes at "Deploying…".
+  const socketsRef = useRef<Set<WebSocket>>(new Set());
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    // Re-arm on (re)mount: without this, StrictMode's dev mount→unmount→remount
+    // leaves mountedRef false forever, so every guarded setDeploy is dropped and
+    // no status pill ever loads in dev.
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      for (const ws of socketsRef.current) ws.close();
+      socketsRef.current.clear();
+    };
   }, []);
 
+  // Latest deployment status per app — fanned out once the app list resolves (and
+  // again after a reload). Best-effort: a row simply shows no pill until it lands.
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!apps) return;
+    for (const a of apps) {
+      void api
+        .get<Page<{ status: string }>>(`/api/v1/apps/${a.id}/deployments?limit=1`)
+        .then((r) => {
+          const d = r.ok ? r.data?.data?.[0] : undefined;
+          if (d && mountedRef.current) setDeploy(a.id, d.status);
+        });
+    }
+  }, [apps]);
 
   useEffect(() => {
     document.title = pageTitle("Dashboard");
@@ -86,22 +97,6 @@ export function Dashboard() {
     window.addEventListener("ss:new-app", onNew);
     return () => window.removeEventListener("ss:new-app", onNew);
   }, []);
-
-  // Live deploy status over WebSocket — no polling (12-realtime-logs.md). The
-  // server pushes a `deployment` frame on each status transition (and at once if
-  // already terminal); we close on a terminal status or a 10-minute safety cap.
-  // Sockets are tied to the component lifetime, and a drop mid-deploy re-checks
-  // the status once so a row never freezes at "Deploying…".
-  const socketsRef = useRef<Set<WebSocket>>(new Set());
-  const mountedRef = useRef(true);
-  useEffect(
-    () => () => {
-      mountedRef.current = false;
-      for (const ws of socketsRef.current) ws.close();
-      socketsRef.current.clear();
-    },
-    [],
-  );
 
   async function refreshDeployStatus(appId: string) {
     const r = await api.get<Page<{ status: string }>>(`/api/v1/apps/${appId}/deployments?limit=1`);
@@ -171,14 +166,17 @@ export function Dashboard() {
         setNewMem("");
         setNewVcsConnectionId("");
         setShowNew(false);
-        await load();
+        reload();
         toast.success(`Created “${name}”`);
       } else {
         const body = (await res.json().catch(() => ({}))) as { detail?: string };
         const detail = body.detail ?? `Create failed (${res.status}).`;
-        setNote(detail);
         toast.error(detail);
       }
+    } catch {
+      // raw fetch rejects on offline/refused connections — surface it instead of
+      // failing silently (every other caller goes through lib/api which maps this).
+      toast.error("Couldn't reach the server — check your connection and try again.");
     } finally {
       setCreating(false);
     }
@@ -295,9 +293,11 @@ export function Dashboard() {
           </p>
         )}
 
-        {apps === null ? (
+        {loading && !apps ? (
           <SkeletonRows count={3} />
-        ) : apps.length > 0 ? (
+        ) : error ? (
+          <ErrorState title="Couldn't load apps" message={error} onRetry={reload} />
+        ) : apps && apps.length > 0 ? (
           <ul className="app-list">
             {apps.map((a) => {
               const st = deploys[a.id]?.status;
@@ -325,7 +325,7 @@ export function Dashboard() {
         ) : (
           <EmptyState
             title="No apps yet"
-            description={note || "Create your first app to get started."}
+            description="Create your first app to get started."
             action={
               <button className="btn btn-primary btn-sm" onClick={() => setShowNew(true)}>
                 New app

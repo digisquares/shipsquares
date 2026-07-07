@@ -125,6 +125,17 @@ export interface paths {
                         };
                     };
                 };
+                /** @description Default Response */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        };
+                    };
+                };
             };
         };
         put?: never;
@@ -426,109 +437,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/organizations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: {
-            parameters: {
-                query?: {
-                    limit?: number;
-                    cursor?: string;
-                    sort?: string;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Default Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            data: {
-                                id: string;
-                                name: string;
-                                slug: string;
-                                /** Format: date-time */
-                                createdAt: string;
-                            }[];
-                            page: {
-                                nextCursor: string | null;
-                                hasMore: boolean;
-                            };
-                        };
-                    };
-                };
-            };
-        };
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        name: string;
-                        slug: string;
-                    };
-                };
-            };
-            responses: {
-                /** @description Default Response */
-                201: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            id: string;
-                            name: string;
-                            slug: string;
-                            /** Format: date-time */
-                            createdAt: string;
-                        };
-                    };
-                };
-                /** @description Default Response */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            type: string;
-                            title: string;
-                            status: number;
-                            code: string;
-                            detail?: string;
-                            instance?: string;
-                            errors?: {
-                                path: string;
-                                message: string;
-                            }[];
-                        };
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/organizations/{id}": {
         parameters: {
             query?: never;
@@ -586,26 +494,7 @@ export interface paths {
         };
         put?: never;
         post?: never;
-        delete: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Default Response */
-                204: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
+        delete?: never;
         options?: never;
         head?: never;
         patch: {
@@ -637,6 +526,26 @@ export interface paths {
                             slug: string;
                             /** Format: date-time */
                             createdAt: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            type: string;
+                            title: string;
+                            status: number;
+                            code: string;
+                            detail?: string;
+                            instance?: string;
+                            errors?: {
+                                path: string;
+                                message: string;
+                            }[];
                         };
                     };
                 };
@@ -7996,6 +7905,8 @@ export interface paths {
                             name: string;
                             scopes: string[];
                             lastUsedAt: string | null;
+                            expiresAt: string | null;
+                            revokedAt: string | null;
                             /** Format: date-time */
                             createdAt: string;
                         }[];
@@ -8016,6 +7927,8 @@ export interface paths {
                     "application/json": {
                         name: string;
                         scopes?: string[];
+                        /** Format: date-time */
+                        expiresAt?: string;
                     };
                 };
             };
@@ -8032,6 +7945,8 @@ export interface paths {
                                 name: string;
                                 scopes: string[];
                                 lastUsedAt: string | null;
+                                expiresAt: string | null;
+                                revokedAt: string | null;
                                 /** Format: date-time */
                                 createdAt: string;
                             };
@@ -8041,6 +7956,72 @@ export interface paths {
                 };
                 /** @description Default Response */
                 400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            type: string;
+                            title: string;
+                            status: number;
+                            code: string;
+                            detail?: string;
+                            instance?: string;
+                            errors?: {
+                                path: string;
+                                message: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api-keys/{id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            name: string;
+                            scopes: string[];
+                            lastUsedAt: string | null;
+                            expiresAt: string | null;
+                            revokedAt: string | null;
+                            /** Format: date-time */
+                            createdAt: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };

@@ -10,10 +10,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Db } from "../db/index.js";
 import * as schema from "../db/schema/index.js";
 import { apps, organizations } from "../db/schema/index.js";
+import { isUniqueViolation } from "../lib/db-errors.js";
 import { sealSecretRef } from "../vcs/provider-deps.js";
 
 import {
   createAppRegistration,
+  createConnection,
   findAppRegistrationByAppId,
   getAppRegistrationById,
   getConnection,
@@ -102,6 +104,52 @@ describe("connections.service (pglite integration)", () => {
     expect((await getAppRegistrationById(db, reg.id))?.organizationId).toBe("org_a");
     const list = await listAppRegistrations(db, "org_a");
     expect(list.some((r) => r.id === reg.id)).toBe(true);
+  });
+
+  it("refuses to bind an installation another org already connected — S11, first bind wins", async () => {
+    await upsertGithubAppConnection(db, "org_a", {
+      provider: "github",
+      accountLogin: "victim",
+      installationId: "400",
+      githubAppId: "42",
+      tokenSecretRef: "r",
+    });
+    // installation_id is client-chosen in the install callback and enumerable —
+    // a second org binding it would gain installation-token access to org_a's repos.
+    await expect(
+      upsertGithubAppConnection(db, "org_b", {
+        provider: "github",
+        accountLogin: "attacker",
+        installationId: "400",
+        githubAppId: "42",
+        tokenSecretRef: "r2",
+      }),
+    ).rejects.toBeInstanceOf(ConflictError);
+    expect((await listConnections(db, "org_b")).some((c) => c.installationId === "400")).toBe(
+      false,
+    );
+    // The owning org can still re-run its own callback (idempotent update).
+    const again = await upsertGithubAppConnection(db, "org_a", {
+      provider: "github",
+      accountLogin: "victim-renamed",
+      installationId: "400",
+      githubAppId: "42",
+      tokenSecretRef: "r3",
+    });
+    expect(again.accountLogin).toBe("victim-renamed");
+  });
+
+  it("vcs_connections_app_installation backstops a raw cross-org insert — S11 race", async () => {
+    // Same unique-violation shape the service's race path keys on.
+    await expect(
+      createConnection(db, "org_b", {
+        provider: "github",
+        kind: "github_app",
+        accountLogin: "attacker",
+        installationId: "400",
+        githubAppId: "42",
+      }),
+    ).rejects.toSatisfy((e) => isUniqueViolation(e));
   });
 
   it("links a connection to a registration's shared key (tokenSecretRef null) — R2.7.1", async () => {

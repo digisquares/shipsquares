@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { signOut } from "../lib/auth";
 import { type Command, paletteResults } from "../lib/commands";
+import { NAV } from "../lib/nav";
 import { go } from "../lib/router";
 import { toggleTheme } from "../lib/theme";
 
@@ -11,6 +12,20 @@ interface AppLite {
   name: string;
   branch?: string;
 }
+
+// Search synonyms per nav destination (NAV only carries labels). Keyed by href so
+// the palette stays the single source of truth's downstream reader, not a fork.
+const NAV_KEYWORDS: Record<string, string[]> = {
+  "#/": ["home", "apps", "overview", "dashboard"],
+  "#/studio": ["database", "sql", "postgres", "mysql", "tables", "query", "studio"],
+  "#/backups": ["backup", "pitr", "restore", "snapshot"],
+  "#/mail": ["mail", "email", "mailbox", "domain", "inbox", "smtp", "dns", "dkim"],
+  "#/catalog": ["catalog", "templates", "install", "services"],
+  "#/servers": ["servers", "nodes", "fleet", "workers", "hosts"],
+  "#/db-performance": ["performance", "pg_stat_statements", "slow", "query", "latency"],
+  "#/activity": ["activity", "deploys", "deployments", "audit", "history"],
+  "#/admin/members": ["admin", "members", "api keys", "connections", "security", "org"],
+};
 
 // Global ⌘K / Ctrl+K command palette (25-design-system.md). Navigates and acts;
 // an unmatched query offers the AI assistant (wired in a later iteration via the
@@ -21,6 +36,7 @@ export function CommandPalette() {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const [apps, setApps] = useState<AppLite[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
 
@@ -54,6 +70,19 @@ export function CommandPalette() {
     };
   }, []);
 
+  // Role gate for the Admin nav command — mirrors the sidebar (app-shell.tsx).
+  useEffect(() => {
+    let alive = true;
+    void api.get<{ role: string; active: boolean }[]>("/api/v1/me/organizations").then((r) => {
+      if (!alive || !r.ok) return;
+      const active = r.data.find((o) => o.active) ?? r.data[0];
+      setIsAdmin(active?.role === "owner" || active?.role === "admin");
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   // On open: remember focus, focus the input, and load apps for "Open <app>".
   useEffect(() => {
     if (!open) return;
@@ -66,34 +95,26 @@ export function CommandPalette() {
   }, [open]);
 
   const commands = useMemo<Command[]>(() => {
-    const list: Command[] = [
-      {
-        id: "nav-dashboard",
-        title: "Go to Dashboard",
+    // Navigate: derived from the single NAV model so the palette can never drift
+    // from the sidebar (previously it hardcoded 4 of ~9 destinations). Admin is
+    // role-gated exactly as the sidebar gates its group.
+    const list: Command[] = NAV.filter((g) => !g.roles || isAdmin)
+      .flatMap((g) => g.items)
+      .map((item) => ({
+        id: `nav-${item.href}`,
+        title: `Go to ${item.label}`,
         group: "Navigate",
-        keywords: ["home", "apps", "overview"],
-        run: () => go("#/"),
-      },
+        keywords: NAV_KEYWORDS[item.href] ?? [item.label.toLowerCase()],
+        run: () => go(item.href),
+      }));
+    list.push(
       {
+        // Personal settings (2FA/profile) — not in NAV; reached via the avatar menu.
         id: "nav-settings",
         title: "Go to Settings",
         group: "Navigate",
-        keywords: ["git", "connections", "account", "github"],
+        keywords: ["settings", "account", "profile", "two-factor", "2fa", "password", "security"],
         run: () => go("#/settings"),
-      },
-      {
-        id: "nav-mail",
-        title: "Go to Email",
-        group: "Navigate",
-        keywords: ["mail", "email", "mailbox", "domain", "inbox", "smtp", "dns"],
-        run: () => go("#/mail"),
-      },
-      {
-        id: "nav-db-performance",
-        title: "Go to DB Performance",
-        group: "Navigate",
-        keywords: ["database", "postgres", "pg_stat_statements", "slow", "query", "performance"],
-        run: () => go("#/db-performance"),
       },
       {
         id: "act-add-mail-domain",
@@ -126,7 +147,7 @@ export function CommandPalette() {
         keywords: ["logout", "log out", "exit"],
         run: () => void signOut().then(() => location.reload()),
       },
-    ];
+    );
     for (const a of apps) {
       list.push({
         id: `app-${a.id}`,
@@ -138,7 +159,7 @@ export function CommandPalette() {
       });
     }
     return list;
-  }, [apps]);
+  }, [apps, isAdmin]);
 
   const results = useMemo(() => paletteResults(commands, query), [commands, query]);
   const itemCount = results.commands.length + (results.askAssistant ? 1 : 0);

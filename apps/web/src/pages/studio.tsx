@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
+import { SkeletonRows } from "../components/skeleton";
 import { api } from "../lib/api";
 import { toast } from "../lib/toast";
 import { CommitBar } from "../studio/commit-bar";
 import { ConnectionForm } from "../studio/connection-form";
-import { DataGrid } from "../studio/data-grid";
+import { DataGrid, cellText } from "../studio/data-grid";
 import { download, toCsv, toJson } from "../studio/export";
 import { InsertRows, type InsertRow } from "../studio/insert-rows";
 import { SchemaTree } from "../studio/schema-tree";
@@ -90,8 +91,19 @@ export function Studio() {
   const insertSeq = useRef(0);
   const [committing, setCommitting] = useState(false);
   const [detail, setDetail] = useState<TableDetail | null>(null);
+  // Monotonic epochs guard against a slow response landing after a newer request
+  // (pick connection A then B, or toggle sort twice): a stale schema/rows payload
+  // must not overwrite the current selection.
+  const schemaEpoch = useRef(0);
+  const rowsEpoch = useRef(0);
 
   const conn = connections?.find((c) => c.id === connId) ?? null;
+  // Only inserts with at least one filled value are actually committed (blank rows
+  // are dropped in commitEdits) — count those so the bar can't say "1 pending
+  // change" for an empty row that Commit would silently no-op.
+  const pendingInsertCount = inserts.filter((ins) =>
+    Object.values(ins.values).some((v) => v !== ""),
+  ).length;
 
   // table -> [] map (schema-qualified + bare names) for SQL-editor autocomplete.
   const sqlTables: Record<string, string[]> = {};
@@ -127,7 +139,9 @@ export function Studio() {
     setDeletes(new Map());
     setInserts([]);
     setSchemaLoading(true);
+    const epoch = ++schemaEpoch.current;
     const r = await api.get<SchemaNode[]>(`/api/v1/db-connections/${enc(id)}/schema`);
+    if (epoch !== schemaEpoch.current) return; // a newer connection was selected
     setSchemaLoading(false);
     if (r.ok && Array.isArray(r.data)) setSchema(r.data);
     else {
@@ -148,7 +162,9 @@ export function Studio() {
       );
     }
     const url = `/api/v1/db-connections/${enc(connId)}/tables/${enc(table.schema)}/${enc(table.name)}/rows?${params.toString()}`;
+    const epoch = ++rowsEpoch.current;
     const r = await api.get<RowsPage>(url);
+    if (epoch !== rowsEpoch.current) return; // a newer table/sort/page request supersedes this
     setRowsLoading(false);
     if (r.ok && r.data) setRows(r.data);
     else {
@@ -220,10 +236,11 @@ export function Studio() {
     if (!rows || rows.primaryKey.length === 0) return;
     const key = rowKeyOf(rows.primaryKey, row);
     const orig = row[column];
+    // Compare against cellText(orig) — same serialization the editor seeds — so a
+    // JSON/array cell opened and closed unchanged isn't falsely marked dirty (and
+    // `String(orig)` would compare against "[object Object]").
     const unchanged =
-      value === null
-        ? orig === null || orig === undefined
-        : value === (orig == null ? "" : String(orig));
+      value === null ? orig === null || orig === undefined : value === cellText(orig);
     setPending((prev) => {
       const next = new Map(prev);
       const entry = next.get(key) ?? {
@@ -369,7 +386,9 @@ export function Studio() {
             />
           )}
           {connections === null ? (
-            <div className="conn-group">Loading…</div>
+            <div className="conn-group">
+              <SkeletonRows count={3} />
+            </div>
           ) : (
             <>
               {managed.length > 0 && <div className="conn-group">Managed (built-in)</div>}
@@ -424,7 +443,9 @@ export function Studio() {
           {!conn ? (
             <div className="conn-group">Select a connection</div>
           ) : schemaLoading ? (
-            <div className="conn-group">Loading…</div>
+            <div className="conn-group">
+              <SkeletonRows count={4} />
+            </div>
           ) : schema ? (
             <SchemaTree schemas={schema} selected={table} onSelect={selectTable} />
           ) : null}
@@ -557,6 +578,7 @@ export function Studio() {
                   onClick={() => void loadRows()}
                   disabled={rowsLoading}
                   title="Refresh"
+                  aria-label="Refresh rows"
                 >
                   ↻
                 </button>
@@ -607,7 +629,7 @@ export function Studio() {
                 onToggleDelete={onToggleDelete}
               />
               <CommitBar
-                count={pending.size + deletes.size + inserts.length}
+                count={pending.size + deletes.size + pendingInsertCount}
                 busy={committing}
                 onDiscard={() => {
                   setPending(new Map());

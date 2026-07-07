@@ -1,17 +1,15 @@
 #!/usr/bin/env node
 import { ApiClient, HttpError } from "./api.js";
-import { parseArgs } from "./args.js";
+import { parseArgs, VALUE_FLAGS } from "./args.js";
 import { runApps, runDeploy, runDeployments, runLogs, runStatus } from "./commands.js";
 import { loadConfig, saveConfig } from "./config.js";
-
-const VALUE_FLAGS = ["url", "email", "password", "tail", "limit"];
 
 const HELP = `ss — ShipSquares CLI
 
 Usage:
   ss login --url <url> --email <e> --password <p>   authenticate; saves a session
   ss apps                                           list apps
-  ss deploy <appId> [--wait]                        trigger a deploy
+  ss deploy <appId> [--wait] [--timeout <seconds>]  trigger a deploy (--wait polls)
   ss status <appId>                                 live container metrics
   ss logs <appId> [--tail N]                        runtime container logs (tail)
   ss deployments <appId> [--limit N]                recent deployments
@@ -56,11 +54,14 @@ async function main(): Promise<number> {
     logs: runLogs,
     deployments: runDeployments,
   };
-  const handler = handlers[command];
-  if (!handler) {
+  // Object.hasOwn, not `handlers[command]` truthiness: a bare index would resolve
+  // inherited prototype members, so `ss constructor` / `ss toString` slipped past
+  // this guard and crashed with a confusing error instead of "Unknown command".
+  if (!Object.hasOwn(handlers, command)) {
     process.stderr.write(`Unknown command: ${command}\nRun \`ss help\`.\n`);
     return 1;
   }
+  const handler = handlers[command]!;
 
   const cfg = loadConfig();
   const url = (args.flags.url as string) || cfg.url;

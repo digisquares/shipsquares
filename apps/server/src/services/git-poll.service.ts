@@ -7,6 +7,7 @@ import type { Db } from "../db/index.js";
 import { apps, deployments } from "../db/schema/index.js";
 import { DEPLOY_QUEUE, dispatchDeploy } from "../deploy/dispatch.js";
 import { runCommand } from "../deploy/exec.js";
+import { swallow } from "../lib/swallow.js";
 import { cloneUrlFor } from "../vcs/resolve-clone.js";
 import { parseLsRemoteHead, pollDecision } from "../webhooks/poll.js";
 
@@ -72,7 +73,12 @@ export async function pollOnce(
         const dep = await createDeployment(db, app.organizationId, app.id, { trigger: "push" });
         triggered += 1;
         await dispatchDeploy(queue, dep.id, {}, () => {
-          void import("../deploy/executor.js").then((m) => m.executeDeploy(db, dep.id));
+          // Fire-and-forget fallback (runs when queue.send failed): executeDeploy's
+          // initial DB reads are before its own try/catch, so an early reject here
+          // would be an unhandled rejection → process exit. Swallow like siblings.
+          void import("../deploy/executor.js")
+            .then((m) => m.executeDeploy(db, dep.id))
+            .catch((e) => swallow("git-poll.inline_deploy", e));
         });
       } catch (err) {
         // An active deploy already covers this drift — poll again next tick.

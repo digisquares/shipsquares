@@ -35,6 +35,13 @@ export const vcsConnections = pgTable(
     orgInstallation: uniqueIndex("vcs_connections_org_installation")
       .on(t.organizationId, t.installationId)
       .where(sql`installation_id IS NOT NULL`),
+    // S11: the install callback's installation_id is client-chosen and enumerable —
+    // one GitHub installation must never be bound by two orgs (the second would gain
+    // installation-token access to the first's private repos). First bind wins;
+    // scoped by App id. Backstops the service-level check against concurrent callbacks.
+    appInstallation: uniqueIndex("vcs_connections_app_installation")
+      .on(t.githubAppId, t.installationId)
+      .where(sql`installation_id IS NOT NULL AND github_app_id IS NOT NULL`),
   }),
 );
 

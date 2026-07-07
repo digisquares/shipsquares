@@ -13,6 +13,8 @@ const View = T.Object({
   name: T.String(),
   scopes: T.Array(T.String()),
   lastUsedAt: T.Union([T.String({ format: "date-time" }), T.Null()]),
+  expiresAt: T.Union([T.String({ format: "date-time" }), T.Null()]),
+  revokedAt: T.Union([T.String({ format: "date-time" }), T.Null()]),
   createdAt: T.String({ format: "date-time" }),
 });
 
@@ -20,6 +22,7 @@ const Create = T.Object(
   {
     name: T.String({ minLength: 1, maxLength: 120 }),
     scopes: T.Optional(T.Array(T.String({ maxLength: 64 }), { maxItems: 32 })),
+    expiresAt: T.Optional(T.String({ format: "date-time" })),
   },
   { additionalProperties: false },
 );
@@ -54,6 +57,15 @@ export const apiKeysRoutes: FastifyPluginAsyncTypebox = async (app) => {
       reply.code(201);
       return created;
     },
+  );
+
+  app.post(
+    "/api-keys/:id/revoke",
+    {
+      schema: { tags: ["api-keys"], params: IdParam, response: { 200: View, 404: Problem } },
+      preHandler: app.requirePermission("apikey:write"),
+    },
+    async (req) => apiKeysService.revokeApiKey(app.db, getOrgId(req), req.params.id),
   );
 
   app.delete(

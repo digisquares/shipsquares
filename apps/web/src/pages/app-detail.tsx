@@ -1,14 +1,16 @@
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { BuildSettingsCard } from "../components/build-settings-card";
 import { Console } from "../components/console";
 import { CopyButton } from "../components/copy-button";
 import { DeployTimeline } from "../components/deploy-timeline";
 import { EmptyState } from "../components/empty-state";
+import { ErrorState } from "../components/error-state";
 import { LogViewer } from "../components/log-viewer";
 import { MetricChart } from "../components/metric-chart";
 import { Page } from "../components/page";
 import { SchedulesCard } from "../components/schedules-card";
+import { SkeletonRows } from "../components/skeleton";
 import { Sparkline } from "../components/sparkline";
 import { StatusPill } from "../components/status-pill";
 import { api } from "../lib/api";
@@ -17,6 +19,7 @@ import type { ApiStep } from "../lib/deploy-timeline";
 import { pageTitle } from "../lib/page-title";
 import { relativeTime } from "../lib/time";
 import { toast } from "../lib/toast";
+import { describeError } from "../lib/use-resource";
 import { wsUrl } from "../lib/ws";
 
 interface AppT {
@@ -50,6 +53,7 @@ interface RuntimeLogLine {
   ts?: string;
 }
 interface EnvRow {
+  id: string; // stable React key — the `key` field is the (editable, possibly blank) var name
   key: string;
   value: string;
   isSecret: boolean;
@@ -90,7 +94,8 @@ type TabKey = (typeof TABS)[number]["key"];
 export function AppDetail({ appId, tab }: { appId: string; tab?: string }) {
   const activeTab: TabKey = TABS.some((t) => t.key === tab) ? (tab as TabKey) : "deployments";
   const [app, setApp] = useState<AppT | null>(null);
-  const [loadFailed, setLoadFailed] = useState(false);
+  // null = ok/loading; a status = the app fetch failed (404 → deleted, else transient)
+  const [appErrorStatus, setAppErrorStatus] = useState<number | null>(null);
   const [deploys, setDeploys] = useState<DeploymentT[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [steps, setSteps] = useState<ApiStep[]>([]);
@@ -113,11 +118,16 @@ export function AppDetail({ appId, tab }: { appId: string; tab?: string }) {
   const consoleTarget =
     deploys.find((d) => d.status === "succeeded" && d.meta?.container)?.meta?.container ?? null;
 
+  // Stable ids for env rows so React keys survive an edit/delete (keying by array
+  // index smeared input state onto the wrong row after a middle-row delete).
+  const envSeq = useRef(0);
+  const nextEnvId = () => `env-${envSeq.current++}`;
+
   // poll live container metrics → rolling sparkline buffers. The chain always
   // reschedules (a blip must not kill polling) and the pending timer is cleared
   // on unmount so no tick fires after an app switch.
   useEffect(() => {
-    if (loadFailed) return; // don't 404-poll an app that doesn't exist
+    if (appErrorStatus !== null) return; // don't poll an app that failed to load
     let stop = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const tick = async () => {
@@ -141,7 +151,7 @@ export function AppDetail({ appId, tab }: { appId: string; tab?: string }) {
       stop = true;
       if (timer) clearTimeout(timer);
     };
-  }, [appId, loadFailed]);
+  }, [appId, appErrorStatus]);
 
   const loadDeploys = useCallback(async () => {
     const r = await api.get<Page<DeploymentT>>(`/api/v1/apps/${appId}/deployments`);
@@ -160,12 +170,18 @@ export function AppDetail({ appId, tab }: { appId: string; tab?: string }) {
       api.get<DomainT[]>(`/api/v1/apps/${appId}/domains`),
       api.get<WebhookT>(`/api/v1/apps/${appId}/webhook`),
     ]);
-    if (a.ok) setApp(a.data);
-    else setLoadFailed(true); // deleted app / stale link — never an eternal spinner
+    if (a.ok) {
+      setApp(a.data);
+      setAppErrorStatus(null);
+    } else {
+      // 404 → deleted/stale link (dead-end); anything else → transient, offer retry.
+      setAppErrorStatus(a.status);
+    }
 
     if (e.ok)
       setEnv(
         e.data.map((v) => ({
+          id: nextEnvId(),
           key: v.key,
           value: v.isSecret ? "" : (v.value ?? ""),
           isSecret: v.isSecret,
@@ -345,9 +361,16 @@ export function AppDetail({ appId, tab }: { appId: string; tab?: string }) {
   }
 
   async function removeDomain(id: string) {
-    await api.del(`/api/v1/domains/${id}`);
-    setDomains((ds) => ds.filter((x) => x.id !== id));
-    toast.success("Domain removed");
+    // api.del never throws — check the result. Removing the row + toasting success
+    // regardless meant a 403/500/offline delete looked done while the domain (and
+    // its cert/routing) still existed and reappeared on the next load.
+    const r = await api.del(`/api/v1/domains/${id}`);
+    if (r.ok) {
+      setDomains((ds) => ds.filter((x) => x.id !== id));
+      toast.success("Domain removed");
+    } else {
+      toast.error(`Remove failed (${r.status})`);
+    }
   }
 
   async function createWebhook() {
@@ -356,9 +379,9 @@ export function AppDetail({ appId, tab }: { appId: string; tab?: string }) {
   }
 
   if (!app) {
-    return (
-      <div className="center-screen">
-        {loadFailed ? (
+    if (appErrorStatus === 404) {
+      return (
+        <div className="center-screen">
           <div className="empty">
             <h2>App not found</h2>
             <p className="muted">It may have been deleted, or this link is stale.</p>
@@ -366,9 +389,24 @@ export function AppDetail({ appId, tab }: { appId: string; tab?: string }) {
               Back to dashboard
             </a>
           </div>
-        ) : (
-          <div className="spinner" aria-label="Loading" />
-        )}
+        </div>
+      );
+    }
+    if (appErrorStatus !== null) {
+      return (
+        <div className="center-screen">
+          <ErrorState
+            title="Couldn't load this app"
+            message={describeError(appErrorStatus)}
+            onRetry={() => void loadAll()}
+          />
+        </div>
+      );
+    }
+    // loading — content-shaped skeleton, not a bare spinner (defect #5)
+    return (
+      <div className="app-detail-loading">
+        <SkeletonRows count={5} />
       </div>
     );
   }
@@ -599,7 +637,7 @@ export function AppDetail({ appId, tab }: { appId: string; tab?: string }) {
               onClick={() =>
                 setEnv((rows) => [
                   ...rows,
-                  { key: "", value: "", isSecret: false, existingSecret: false },
+                  { id: nextEnvId(), key: "", value: "", isSecret: false, existingSecret: false },
                 ])
               }
             >
@@ -609,7 +647,7 @@ export function AppDetail({ appId, tab }: { appId: string; tab?: string }) {
           <form onSubmit={saveEnv}>
             {env.length === 0 && <p className="muted">No environment variables.</p>}
             {env.map((row, i) => (
-              <div className="env-row" key={i}>
+              <div className="env-row" key={row.id}>
                 <input
                   className="mono"
                   placeholder="KEY"

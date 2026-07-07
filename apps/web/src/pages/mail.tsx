@@ -1,6 +1,7 @@
-import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from "react";
 
 import { EmptyState } from "../components/empty-state";
+import { ErrorState } from "../components/error-state";
 import { Page } from "../components/page";
 import { SkeletonRows } from "../components/skeleton";
 import { StatusPill } from "../components/status-pill";
@@ -8,6 +9,8 @@ import { api } from "../lib/api";
 import { confirm } from "../lib/confirm";
 import { pageTitle } from "../lib/page-title";
 import { toast } from "../lib/toast";
+import { useFocusTrap } from "../lib/use-focus-trap";
+import { useResource } from "../lib/use-resource";
 
 // Managed-email workspace (R9 · mail/07-ui-ux-review.md). The single pane of
 // glass over Stalwart: connect a server, add a domain, watch DNS verify live,
@@ -90,9 +93,17 @@ export function isValidLocalPart(s: string): boolean {
   return /^[a-z0-9._+-]+$/i.test(s.trim());
 }
 
-function copy(text: string): void {
-  void navigator.clipboard?.writeText?.(text);
-  toast.success("Copied to clipboard");
+async function copy(text: string): Promise<void> {
+  // Only claim success if the write actually resolved — on an insecure context or
+  // denied permission the clipboard API is absent/rejects, and toasting "Copied"
+  // regardless is a false success (mirrors CopyButton).
+  try {
+    if (!navigator.clipboard) throw new Error("clipboard unavailable");
+    await navigator.clipboard.writeText(text);
+    toast.success("Copied to clipboard");
+  } catch {
+    toast.error("Couldn't copy — copy it manually");
+  }
 }
 
 // ── reusable accessible modal (reuses the confirm visual language) ──────────
@@ -106,10 +117,10 @@ function Modal({
   onClose: () => void;
   children: ReactNode;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useFocusTrap<HTMLDivElement>();
   useEffect(() => {
     ref.current?.focus();
-  }, []);
+  }, [ref]);
   return (
     <div className="cmdk-overlay" role="presentation" onMouseDown={onClose}>
       <div
@@ -150,7 +161,7 @@ function PasswordDialog({
         {password}
       </code>
       <div className="confirm-actions">
-        <button type="button" className="btn btn-ghost" onClick={() => copy(password)}>
+        <button type="button" className="btn btn-ghost" onClick={() => void copy(password)}>
           Copy
         </button>
         <button type="button" className="btn btn-primary" onClick={onClose}>
@@ -492,7 +503,7 @@ function DomainRow({ domain }: { domain: MailDomain }) {
                   <StatusPill status={r.status} />
                   <button
                     className="btn btn-ghost btn-sm"
-                    onClick={() => copy(r.value)}
+                    onClick={() => void copy(r.value)}
                     aria-label={`Copy ${dnsKindLabel(r.kind)} value`}
                   >
                     Copy
@@ -617,19 +628,16 @@ function DomainRow({ domain }: { domain: MailDomain }) {
 // ── instance card ───────────────────────────────────────────────────────────
 
 function InstanceCard({ instance }: { instance: MailInstance }) {
-  const [domains, setDomains] = useState<MailDomain[] | null>(null);
+  const {
+    data: domains,
+    loading,
+    error,
+    reload,
+  } = useResource(() => api.get<MailDomain[]>(`/api/v1/mail/instances/${instance.id}/domains`));
   const [fqdn, setFqdn] = useState("");
   const [dnsMode, setDnsMode] = useState<"hint" | "auto">("hint");
   const [fqdnErr, setFqdnErr] = useState("");
   const [adding, setAdding] = useState(false);
-
-  const load = useCallback(async () => {
-    const r = await api.get<MailDomain[]>(`/api/v1/mail/instances/${instance.id}/domains`);
-    setDomains(r.ok && Array.isArray(r.data) ? r.data : []);
-  }, [instance.id]);
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   async function addDomain(e: FormEvent) {
     e.preventDefault();
@@ -645,7 +653,7 @@ function InstanceCard({ instance }: { instance: MailInstance }) {
     if (r.ok) {
       toast.success("Domain added");
       setFqdn("");
-      void load();
+      reload();
     } else {
       toast.error(`Could not add domain (${r.status}).`);
     }
@@ -686,18 +694,20 @@ function InstanceCard({ instance }: { instance: MailInstance }) {
           {adding ? "Adding…" : "Add domain"}
         </button>
       </form>
-      {domains === null ? (
+      {loading && !domains ? (
         <SkeletonRows count={2} />
-      ) : domains.length === 0 ? (
-        <p className="muted" style={{ marginTop: 12 }}>
-          No domains yet — add one to publish DNS and create mailboxes.
-        </p>
-      ) : (
+      ) : error ? (
+        <ErrorState title="Couldn't load domains" message={error} onRetry={reload} />
+      ) : domains && domains.length > 0 ? (
         <ul className="mail-domains">
           {domains.map((d) => (
             <DomainRow key={d.id} domain={d} />
           ))}
         </ul>
+      ) : (
+        <p className="muted" style={{ marginTop: 12 }}>
+          No domains yet — add one to publish DNS and create mailboxes.
+        </p>
       )}
     </section>
   );
@@ -706,23 +716,14 @@ function InstanceCard({ instance }: { instance: MailInstance }) {
 // ── workspace ────────────────────────────────────────────────────────────────
 
 export function Mail() {
-  const [instances, setInstances] = useState<MailInstance[] | null>(null);
-  const [note, setNote] = useState("");
+  const {
+    data: instances,
+    loading,
+    error,
+    reload,
+  } = useResource(() => api.get<MailInstance[]>("/api/v1/mail/instances"));
   const [connecting, setConnecting] = useState(false);
 
-  const load = useCallback(async () => {
-    const r = await api.get<MailInstance[]>("/api/v1/mail/instances");
-    if (r.ok && Array.isArray(r.data)) {
-      setInstances(r.data);
-      setNote("");
-    } else {
-      setInstances([]);
-      setNote(`Mail API responded ${r.status}.`);
-    }
-  }, []);
-  useEffect(() => {
-    void load();
-  }, [load]);
   useEffect(() => {
     document.title = pageTitle("Email");
   }, []);
@@ -740,25 +741,26 @@ export function Mail() {
           ) : undefined
         }
       >
-        {instances === null ? (
+        {loading && !instances ? (
           <div className="card">
             <SkeletonRows count={3} />
           </div>
-        ) : instances.length === 0 ? (
+        ) : error ? (
+          <div className="card">
+            <ErrorState title="Couldn't load mail" message={error} onRetry={reload} />
+          </div>
+        ) : instances && instances.length > 0 ? (
+          instances.map((inst) => <InstanceCard key={inst.id} instance={inst} />)
+        ) : (
           <EmptyState
             title="No mail server yet"
-            description={
-              note ||
-              "Connect an installed Stalwart server to host email on your domain, or deploy one from the catalog first."
-            }
+            description="Connect an installed Stalwart server to host email on your domain, or deploy one from the catalog first."
             action={
               <button className="btn btn-primary btn-sm" onClick={() => setConnecting(true)}>
                 Connect mail server
               </button>
             }
           />
-        ) : (
-          instances.map((inst) => <InstanceCard key={inst.id} instance={inst} />)
         )}
       </Page>
 
@@ -767,7 +769,7 @@ export function Mail() {
           onClose={() => setConnecting(false)}
           onConnected={() => {
             setConnecting(false);
-            void load();
+            reload();
           }}
         />
       )}

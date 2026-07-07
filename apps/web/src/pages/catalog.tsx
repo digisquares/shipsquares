@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { EmptyState } from "../components/empty-state";
+import { ErrorState } from "../components/error-state";
 import { Page } from "../components/page";
+import { SkeletonRows } from "../components/skeleton";
 import { StatusPill } from "../components/status-pill";
 import { api } from "../lib/api";
 import { confirm } from "../lib/confirm";
 import { pageTitle } from "../lib/page-title";
 import { toast } from "../lib/toast";
+import { useResource } from "../lib/use-resource";
 
 // Catalog (17): browse the vendored templates, one-click install, manage
 // installed services. Installs are async server-side — the list polls while
@@ -30,9 +33,13 @@ interface InstalledService {
 const SHOWN_CAP = 60;
 
 export function Catalog() {
-  const [items, setItems] = useState<CatalogItem[] | null>(null);
+  const {
+    data: items,
+    loading,
+    error,
+    reload,
+  } = useResource(() => api.get<CatalogItem[]>("/api/v1/catalog"));
   const [installed, setInstalled] = useState<InstalledService[]>([]);
-  const [loadFailed, setLoadFailed] = useState(false);
   const [query, setQuery] = useState("");
   const [busySlug, setBusySlug] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
@@ -44,15 +51,7 @@ export function Catalog() {
 
   useEffect(() => {
     document.title = pageTitle("Catalog");
-    void (async () => {
-      const r = await api.get<CatalogItem[]>("/api/v1/catalog");
-      if (r.ok && r.data) setItems(r.data);
-      else {
-        setItems([]);
-        setLoadFailed(true);
-      }
-      await loadInstalled();
-    })();
+    void loadInstalled();
   }, [loadInstalled]);
 
   // poll while any install is in flight
@@ -124,7 +123,7 @@ export function Catalog() {
           aria-label="Search templates"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search 358 templates…"
+          placeholder={items ? `Search ${items.length} templates…` : "Search templates…"}
         />
       }
     >
@@ -168,10 +167,10 @@ export function Catalog() {
             </span>
           ) : null}
         </div>
-        {items === null ? (
-          <p className="muted">Loading catalog…</p>
-        ) : loadFailed ? (
-          <p className="field-error">Couldn&apos;t load the catalog — check the server.</p>
+        {loading && !items ? (
+          <SkeletonRows count={6} />
+        ) : error ? (
+          <ErrorState title="Couldn't load the catalog" message={error} onRetry={reload} />
         ) : filtered.length === 0 ? (
           <EmptyState title="No matches" description="Try a different search term." />
         ) : (

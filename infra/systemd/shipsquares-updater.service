@@ -6,5 +6,17 @@ Description=ShipSquares self-updater (download, migrate, swap, restart, roll bac
 [Service]
 Type=oneshot
 ExecStart=/opt/shipsquares/bin/update.sh
-# No sandboxing here on purpose: the updater must write /opt/shipsquares and drive
-# systemctl. It is a small, audited script triggered only by a control-plane file write.
+# The updater must write /opt/shipsquares, run migrations as the service user via
+# `sudo -u shipsquares`, and drive `systemctl restart` — so the aggressive
+# confinements are deliberately OMITTED (they would break it): NoNewPrivileges and
+# RestrictSUIDSGID block sudo's setuid transition, and ProtectSystem=strict would
+# block the /opt swap. What IS safe to lock down, we do — the updater never touches
+# home dirs, kernel tunables/modules, cgroups, the clock, hostname, or realtime:
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictRealtime=true
+LockPersonality=true

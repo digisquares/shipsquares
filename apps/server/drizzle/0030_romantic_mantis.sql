@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "vcs_connections_app_installation" ON "vcs_connections" USING btree ("github_app_id","installation_id") WHERE installation_id IS NOT NULL AND github_app_id IS NOT NULL;

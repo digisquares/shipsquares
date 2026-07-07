@@ -374,25 +374,33 @@ export function ChatPanel() {
       })
       .catch(() => restore());
 
-  const respondApproval = useCallback((approve: boolean) => {
-    setPendingApproval((p) => {
-      if (p)
-        void resolve("/api/v1/chat/approve", { id: p.id, approve }, () => setPendingApproval(p));
-      return null;
-    });
-  }, []);
+  // Read the pending value OUTSIDE the state updater and POST from the callback
+  // body (like respondPlan). Doing the fetch inside a setState updater double-fires
+  // it under StrictMode's dev double-invoke; the second POST fails (id already
+  // resolved) and its restore() handler resurrects the card after a good approval.
+  const respondApproval = useCallback(
+    (approve: boolean) => {
+      const p = pendingApproval;
+      if (!p) return;
+      setPendingApproval(null);
+      void resolve("/api/v1/chat/approve", { id: p.id, approve }, () => setPendingApproval(p));
+    },
+    [pendingApproval],
+  );
 
   // Submit (or cancel) the structured details the assistant asked for; the blocked
   // turn resumes once we POST. Omitting `answers` cancels.
-  const respondInput = useCallback((answers: Record<string, unknown> | null) => {
-    setPendingInput((p) => {
-      if (p)
-        void resolve("/api/v1/chat/answer", { id: p.id, ...(answers ? { answers } : {}) }, () =>
-          setPendingInput(p),
-        );
-      return null;
-    });
-  }, []);
+  const respondInput = useCallback(
+    (answers: Record<string, unknown> | null) => {
+      const p = pendingInput;
+      if (!p) return;
+      setPendingInput(null);
+      void resolve("/api/v1/chat/answer", { id: p.id, ...(answers ? { answers } : {}) }, () =>
+        setPendingInput(p),
+      );
+    },
+    [pendingInput],
+  );
 
   // Approve/cancel a proposed plan (Phase C). A plan decision is just a boolean, so
   // it reuses /chat/approve. On approve we keep the card as a live checklist; on
@@ -489,7 +497,7 @@ export function ChatPanel() {
         {notConfigured && (
           <p className="chat-unconfigured">
             AI chat isn&apos;t configured for this org yet. An admin can add a Claude API key under{" "}
-            <a href="#/settings">Settings → AI assistant</a>.
+            <a href="#/admin/ai">Admin → AI assistant</a>.
           </p>
         )}
         {turns.map((t, i) => {

@@ -4,9 +4,10 @@ import type { FastifyRequest } from "fastify";
 import { db } from "../db/index.js";
 import { apiKeys, memberships } from "../db/schema/index.js";
 import type { RequestContext, Role } from "../lib/ctx.js";
+import { swallow } from "../lib/swallow.js";
 import type { Permission } from "../rbac/permissions.js";
 
-import { hashApiKey, parseBearer } from "./api-key-core.js";
+import { apiKeyDenied, hashApiKey, parseBearer } from "./api-key-core.js";
 import type { Auth } from "./better-auth.js";
 
 // Anonymous context — protected routes 401 at requirePermission.
@@ -70,7 +71,9 @@ function toHeaders(raw: FastifyRequest["headers"]): Headers {
 
 /** Bearer ss_live_ token → hash lookup → org-scoped context. Keys act as a
  *  DEPLOYER (deploy/app surface, no org administration); non-empty scopes
- *  narrow further at requirePermission. lastUsedAt is touched best-effort. */
+ *  narrow further at requirePermission. lastUsedAt is touched best-effort.
+ *  Revoked/expired keys resolve to null (→ ANON → 401) without a touch, so
+ *  lastUsedAt keeps meaning "last successful use" (S3). */
 async function resolveApiKey(token: string): Promise<RequestContext | null> {
   const rows = await db
     .select()
@@ -79,11 +82,12 @@ async function resolveApiKey(token: string): Promise<RequestContext | null> {
     .limit(1);
   const key = rows[0];
   if (!key) return null;
+  if (apiKeyDenied(key)) return null;
   void db
     .update(apiKeys)
     .set({ lastUsedAt: new Date() })
     .where(eq(apiKeys.id, key.id))
-    .catch(() => undefined);
+    .catch((e) => swallow("auth.apikey_touch", e));
   return {
     via: "apiKey",
     actor: { apiKeyId: key.id },

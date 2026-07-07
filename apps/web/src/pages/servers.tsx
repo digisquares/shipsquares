@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { EmptyState } from "../components/empty-state";
+import { ErrorState } from "../components/error-state";
 import { Page } from "../components/page";
 import { SkeletonRows } from "../components/skeleton";
 import { StatusPill } from "../components/status-pill";
@@ -8,6 +9,7 @@ import { api } from "../lib/api";
 import { pageTitle } from "../lib/page-title";
 import type { Tone } from "../lib/status";
 import { toast } from "../lib/toast";
+import { useResource } from "../lib/use-resource";
 
 interface ServerRow {
   id: string;
@@ -33,23 +35,14 @@ const TONE: Record<string, Tone> = {
 // Servers (docs/web-ui/01, §3 Platform — previously had no route). Control +
 // worker nodes with health, Docker and proxy status, and a re-check action.
 export function Servers() {
-  const [servers, setServers] = useState<ServerRow[] | null>(null);
-  const [note, setNote] = useState("");
+  const {
+    data: servers,
+    loading,
+    error,
+    reload,
+  } = useResource(() => api.get<{ data: ServerRow[] }>("/api/v1/servers"));
   const [checking, setChecking] = useState<Record<string, boolean>>({});
 
-  const load = useCallback(async () => {
-    const r = await api.get<{ data: ServerRow[] }>("/api/v1/servers");
-    if (r.ok) {
-      setServers(r.data.data);
-      setNote("");
-    } else {
-      setServers([]);
-      setNote(`Servers API responded ${r.status}.`);
-    }
-  }, []);
-  useEffect(() => {
-    void load();
-  }, [load]);
   useEffect(() => {
     document.title = pageTitle("Servers");
   }, []);
@@ -60,7 +53,7 @@ export function Servers() {
     setChecking((c) => ({ ...c, [id]: false }));
     if (r.ok) {
       toast.success("Health check queued");
-      setTimeout(() => void load(), 1500);
+      setTimeout(() => reload(), 1500);
     } else {
       toast.error(`Check failed (${r.status}).`);
     }
@@ -72,11 +65,13 @@ export function Servers() {
         <div className="card-head">
           <h2>Servers</h2>
         </div>
-        {servers === null ? (
+        {loading && !servers ? (
           <SkeletonRows count={3} />
-        ) : servers.length > 0 ? (
+        ) : error ? (
+          <ErrorState title="Couldn't load servers" message={error} onRetry={reload} />
+        ) : servers && servers.data.length > 0 ? (
           <ul className="app-list">
-            {servers.map((s) => (
+            {servers.data.map((s) => (
               <li key={s.id} className="app-row">
                 <span className="app-name">{s.name}</span>
                 <span className="muted mono">{s.host}</span>
@@ -102,7 +97,7 @@ export function Servers() {
         ) : (
           <EmptyState
             title="No servers yet"
-            description={note || "Add a worker server via the API or CLI to scale out deploys."}
+            description="Add a worker server via the API or CLI to scale out deploys."
           />
         )}
       </section>

@@ -1,5 +1,6 @@
 import type { FastifyPluginAsyncTypebox } from "@fastify/type-provider-typebox";
 import { Type as T } from "@sinclair/typebox";
+import { ConflictError } from "@ss/shared";
 
 import * as connectionsService from "../services/connections.service.js";
 import { exchangeManifestCode } from "../vcs/github-manifest.js";
@@ -131,6 +132,10 @@ export const vcsGithubRoutes: FastifyPluginAsyncTypebox = async (app) => {
         });
       } catch (err) {
         app.log.warn?.({ err }, "github app install callback failed");
+        // S11: someone (or another of the actor's orgs) already bound this
+        // installation — a distinct code so the UI can say so instead of a
+        // generic install failure.
+        if (err instanceof ConflictError) return fail("installation_bound");
         return fail("install_failed");
       }
       return reply.redirect("/#/settings");

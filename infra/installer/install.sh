@@ -18,16 +18,18 @@ set -euo pipefail
 SS_VERSION="${SS_VERSION:-latest}"
 # Bundles are arch-specific (vendored node-pty addon); the URL carries the arch.
 case "$(uname -m)" in x86_64) _SS_ARCH=amd64 ;; aarch64|arm64) _SS_ARCH=arm64 ;; *) _SS_ARCH=amd64 ;; esac
-BUNDLE_SRC="${SS_BUNDLE:-https://get.shipsquares.com/bundles/${SS_VERSION}-${_SS_ARCH}.tgz}"
 PUBLIC_DOMAIN="${SS_DOMAIN:-}"
 ADMIN_EMAIL="${SS_ADMIN_EMAIL:-}"
 ADMIN_PASSWORD="${SS_ADMIN_PASSWORD:-}"
 SS_LOCAL="${SS_LOCAL:-}"          # force a localhost (tunnel-only) install
 SS_PUBLIC_IP="${SS_PUBLIC_IP:-}"  # override public-IP detection
+BUNDLE_SRC=""                     # set from --bundle, else derived after the loop
+_bundle_explicit=0
+_version_pinned=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --version)  SS_VERSION="$2"; shift 2 ;;
-    --bundle)   BUNDLE_SRC="$2"; shift 2 ;;
+    --version)  SS_VERSION="$2"; _version_pinned=1; shift 2 ;;
+    --bundle)   BUNDLE_SRC="$2"; _bundle_explicit=1; shift 2 ;;
     --domain)   PUBLIC_DOMAIN="$2"; shift 2 ;;
     --admin-email) ADMIN_EMAIL="$2"; shift 2 ;;
     --public-ip) SS_PUBLIC_IP="$2"; shift 2 ;;
@@ -35,6 +37,19 @@ while [ $# -gt 0 ]; do
     *) echo "unknown flag: $1" >&2; exit 2 ;;
   esac
 done
+# Resolve the bundle source AFTER parsing flags, so `--version X` actually pins the
+# bundle URL (it was previously computed from the default SS_VERSION before the
+# loop, and an inherited SS_BUNDLE=latest from the piped bootstrap always won).
+# Precedence: --bundle > --version > SS_BUNDLE env > default latest.
+if [ "$_bundle_explicit" = "1" ]; then
+  :
+elif [ "$_version_pinned" = "1" ]; then
+  BUNDLE_SRC="https://get.shipsquares.com/bundles/${SS_VERSION}-${_SS_ARCH}.tgz"
+elif [ -n "${SS_BUNDLE:-}" ]; then
+  BUNDLE_SRC="$SS_BUNDLE"
+else
+  BUNDLE_SRC="https://get.shipsquares.com/bundles/${SS_VERSION}-${_SS_ARCH}.tgz"
+fi
 export SS_VERSION BUNDLE_SRC PUBLIC_DOMAIN ADMIN_EMAIL ADMIN_PASSWORD SS_LOCAL SS_PUBLIC_IP
 
 # --- load libs ----------------------------------------------------------------

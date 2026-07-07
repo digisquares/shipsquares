@@ -1,5 +1,5 @@
 import { AppError, ConflictError, NotFoundError, newId } from "@ss/shared";
-import { and, asc, desc, eq, getTableColumns, gt, inArray, lt } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, gt, inArray, lt, sql } from "drizzle-orm";
 
 import type { Db } from "../db/index.js";
 import { apps, deploymentLogs, deploymentSteps, deployments } from "../db/schema/index.js";
@@ -190,6 +190,33 @@ export async function listOrgDeployments(
     data: built.data.map((r) => ({ ...toView(r), appName: r.appName })),
     page: built.page,
   };
+}
+
+/**
+ * Console safety: does `container` belong to a deployment in this org? A running
+ * container's name is recorded in `deployments.meta.container` and embeds the
+ * app's globally-unique id, so a match is proof of ownership. The interactive
+ * console WS calls this before attaching a shell, refusing any container the org
+ * hasn't deployed — closing the cross-tenant `docker exec` gap where a
+ * client-supplied container name reached docker unchecked.
+ */
+export async function containerBelongsToOrg(
+  db: Db,
+  orgId: string,
+  container: string,
+): Promise<boolean> {
+  if (!container) return false;
+  const rows = await db
+    .select({ id: deployments.id })
+    .from(deployments)
+    .where(
+      and(
+        eq(deployments.organizationId, orgId),
+        sql`${deployments.meta} ->> 'container' = ${container}`,
+      ),
+    )
+    .limit(1);
+  return rows[0] !== undefined;
 }
 
 export async function getDeployment(db: Db, orgId: string, id: string): Promise<DeploymentView> {

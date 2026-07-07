@@ -5,11 +5,18 @@ import { loadConfig } from "@ss/shared";
 import { buildApp } from "./app.js";
 import { sweepStaleDeployments } from "./deploy/sweep.js";
 import { convergeProxy } from "./proxy/caddy/converge.js";
+import { installShutdownHandlers } from "./shutdown.js";
 
 // Load + validate config exactly once; a missing/malformed env crashes here,
 // before any listener is opened (02-foundations.md).
 const config = loadConfig();
 const app = await buildApp();
+
+// Background loops started after `listen` own resources `app.close()` can't reach
+// (the collector's interval, the pg-bridge LISTEN connection). Captured here and
+// torn down on shutdown; default to no-ops so a failed/absent boot is harmless.
+let stopCollector: () => void = () => {};
+let stopPgBridge: () => Promise<void> = async () => {};
 
 try {
   await app.listen({ port: config.PORT, host: "0.0.0.0" });
@@ -104,7 +111,7 @@ try {
 // future multi-instance control plane fans out logs/status. Non-fatal.
 try {
   const { startPgBridge } = await import("./realtime/pg-bridge.js");
-  await startPgBridge(config.DATABASE_URL);
+  stopPgBridge = await startPgBridge(config.DATABASE_URL);
   console.log("realtime pg-bridge listening (ss_bus)");
 } catch (err) {
   console.warn(`realtime pg-bridge skipped: ${(err as Error).message}`);
@@ -154,7 +161,7 @@ try {
 // metric_samples, retention trim, threshold-alert evaluation. Non-fatal.
 try {
   const { startCollector } = await import("./metrics/collector.js");
-  startCollector(app.db, config);
+  stopCollector = startCollector(app.db, config);
   console.log("metrics collector started (60s interval)");
 } catch (err) {
   console.warn(`metrics collector skipped: ${(err as Error).message}`);
@@ -171,3 +178,12 @@ if (config.PROXY_DRIVER === "caddy") {
     console.warn(`caddy converge skipped: ${(err as Error).message}`);
   }
 }
+
+// Graceful shutdown (C2): on SIGTERM/SIGINT, stop the background loops, then
+// app.close() (queue graceful-stop + dbStudio pool close via onClose hooks),
+// under a watchdog. In-flight deploys aren't awaited — restart recovery
+// (sweepStaleDeployments) finalizes them on the next boot.
+installShutdownHandlers({
+  app,
+  stops: [() => stopCollector(), () => stopPgBridge()],
+});

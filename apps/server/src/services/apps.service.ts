@@ -3,7 +3,7 @@ import { and, desc, eq } from "drizzle-orm";
 
 import type { Db } from "../db/index.js";
 import type { BuildConfig } from "../db/schema/apps.js";
-import { apps, servers, vcsConnections } from "../db/schema/index.js";
+import { apps, registryCredentials, servers, vcsConnections } from "../db/schema/index.js";
 import { buildPage, type PageResult } from "../lib/pagination.js";
 
 import { afterCursor, isUniqueViolation } from "./util.js";
@@ -92,6 +92,17 @@ async function assertConnectionInOrg(db: Db, orgId: string, connectionId: string
     .limit(1);
   if (!rows[0]) {
     throw new ValidationError("vcsConnectionId does not reference a connection in this org");
+  }
+}
+
+async function assertRegistryCredInOrg(db: Db, orgId: string, credId: string): Promise<void> {
+  const rows = await db
+    .select({ id: registryCredentials.id })
+    .from(registryCredentials)
+    .where(and(eq(registryCredentials.id, credId), eq(registryCredentials.organizationId, orgId)))
+    .limit(1);
+  if (!rows[0]) {
+    throw new ValidationError("registryCredentialId does not reference a credential in this org");
   }
 }
 
@@ -219,6 +230,8 @@ export async function updateApp(
 ): Promise<AppView> {
   if (patch.serverId) await assertServerInOrg(db, orgId, patch.serverId);
   if (patch.vcsConnectionId) await assertConnectionInOrg(db, orgId, patch.vcsConnectionId);
+  if (patch.registryCredentialId)
+    await assertRegistryCredInOrg(db, orgId, patch.registryCredentialId);
   const set: Partial<typeof apps.$inferInsert> = {};
   if (patch.name !== undefined) set.name = patch.name;
   if (patch.repo !== undefined) set.repo = patch.repo;

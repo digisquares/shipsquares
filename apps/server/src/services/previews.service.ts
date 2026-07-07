@@ -4,6 +4,7 @@ import { and, desc, eq, ne } from "drizzle-orm";
 
 import type { Db } from "../db/index.js";
 import { previewEnvironments } from "../db/schema/index.js";
+import { swallow } from "../lib/swallow.js";
 import { previewFqdn, previewLimitReached } from "../previews/fqdn.js";
 import { teardownPreview } from "../previews/orchestrator.js";
 import { parsePullRequestEvent, previewActionFor } from "../previews/pr-events.js";
@@ -140,7 +141,7 @@ export async function handlePullRequest(
     const inline = () => {
       void import("../deploy/executor.js")
         .then((m) => m.executeDeploy(db, dep.id, { preview: previewCtx }))
-        .catch(() => undefined);
+        .catch((e) => swallow("preview.inline_deploy", e));
     };
     if (queue) await dispatchDeploy(queue, dep.id, { preview: previewCtx }, inline);
     else inline();

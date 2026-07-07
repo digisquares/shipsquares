@@ -5,6 +5,7 @@ import { and, desc, eq } from "drizzle-orm";
 import type { Db } from "../db/index.js";
 import { servers } from "../db/schema/index.js";
 import { buildPage, type PageResult } from "../lib/pagination.js";
+import { swallow } from "../lib/swallow.js";
 import { loadMasterKey, open, seal } from "../secrets/crypto.js";
 import type { SealedValue } from "../secrets/types.js";
 import { bootstrapSucceeded, runBootstrap } from "../servers/bootstrap.js";
@@ -229,7 +230,7 @@ export async function runServerBootstrap(db: Db, config: Env, row: ServerRow): P
       .update(servers)
       .set({ status: "error", lastCheckedAt: new Date() })
       .where(eq(servers.id, row.id))
-      .catch(() => undefined);
+      .catch((e) => swallow("server.mark_error", e));
   }
 }
 

@@ -1,14 +1,17 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 
 import { getRequest, resolveConfirm, subscribe } from "../lib/confirm";
+import { useFocusTrap } from "../lib/use-focus-trap";
 
 // Single host for the imperative confirm() API (25-design-system.md). Accessible
 // alertdialog: initial focus lands on Cancel for destructive prompts (safer),
-// Esc and backdrop-click cancel. Entrance animation is reduced-motion gated.
+// focus is trapped inside and restored to the trigger on close, Esc and
+// backdrop-click cancel. Entrance animation is reduced-motion gated.
 export function ConfirmDialog() {
   const req = useSyncExternalStore(subscribe, getRequest, getRequest);
   const confirmRef = useRef<HTMLButtonElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const trapRef = useFocusTrap<HTMLDivElement>();
 
   useEffect(() => {
     if (req) (req.danger ? cancelRef : confirmRef).current?.focus();
@@ -23,6 +26,7 @@ export function ConfirmDialog() {
         aria-modal="true"
         aria-labelledby="confirm-title"
         aria-describedby={req.message ? "confirm-msg" : undefined}
+        ref={trapRef}
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
           if (e.key === "Escape") resolveConfirm(false);

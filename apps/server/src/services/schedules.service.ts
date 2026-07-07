@@ -6,6 +6,7 @@ import type { Db } from "../db/index.js";
 import { apps, scheduledJobRuns, scheduledJobs, servers } from "../db/schema/index.js";
 import { runCommand } from "../deploy/exec.js";
 import { containerName } from "../deploy/executor.js";
+import { swallow } from "../lib/swallow.js";
 import { isValidCron, jobExecCommand, scheduleQueueName, tailOutput } from "../schedules/core.js";
 
 // Scheduled jobs (29-scheduled-jobs.md): user cron against an app container or
@@ -177,7 +178,7 @@ export async function runScheduleNow(db: Db, job: JobRow): Promise<void> {
       ...(error ? { error } : {}),
     })
     .where(eq(scheduledJobRuns.id, runId))
-    .catch(() => undefined);
+    .catch((e) => swallow("schedule.record_run", e));
 }
 
 // One worker per schedule queue; guarded so re-sync never double-registers.
@@ -207,11 +208,23 @@ export async function syncSchedule(db: Db, boss: PgBoss, job: JobRow): Promise<v
   await ensureWorker(db, boss, job.id);
 }
 
-/** Boot-time re-registration of every enabled schedule (Dokploy's initCronJobs). */
+/** Boot-time re-registration of every enabled schedule (Dokploy's initCronJobs).
+ *  Each row is isolated: a single bad schedule (e.g. an out-of-range cron stored
+ *  before validation was tightened, or an invalid tz) must not abort the loop and
+ *  leave every later schedule — including other orgs' — unregistered. Returns the
+ *  count that registered cleanly. */
 export async function bootSchedules(db: Db, boss: PgBoss): Promise<number> {
   const rows = await db.select().from(scheduledJobs).where(eq(scheduledJobs.enabled, true));
-  for (const job of rows) await syncSchedule(db, boss, job);
-  return rows.length;
+  let registered = 0;
+  for (const job of rows) {
+    try {
+      await syncSchedule(db, boss, job);
+      registered += 1;
+    } catch (e) {
+      swallow(`schedule.boot_register:${job.id}`, e);
+    }
+  }
+  return registered;
 }
 
 /** Internal row fetch for the run-now route (org-scoped). */

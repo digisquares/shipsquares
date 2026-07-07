@@ -59,6 +59,34 @@ describe("memberChangeCheck", () => {
     ).toEqual({ ok: true });
   });
 
+  it("admins cannot promote anyone (or themselves) to owner or admin", () => {
+    expect(
+      memberChangeCheck({
+        actorRole: "admin",
+        targetRole: "deployer",
+        newRole: "owner",
+        ownerCount: 1,
+      }),
+    ).toEqual({ ok: false, code: "member.role_ceiling" });
+    expect(
+      memberChangeCheck({
+        actorRole: "admin",
+        targetRole: "admin", // self, currently admin
+        newRole: "admin",
+        ownerCount: 1,
+      }),
+    ).toEqual({ ok: false, code: "member.role_ceiling" });
+    // an admin demoting themselves / others to a lower role is still fine
+    expect(
+      memberChangeCheck({
+        actorRole: "admin",
+        targetRole: "admin",
+        newRole: "deployer",
+        ownerCount: 1,
+      }),
+    ).toEqual({ ok: true });
+  });
+
   it("deployers/viewers cannot manage members at all", () => {
     expect(
       memberChangeCheck({

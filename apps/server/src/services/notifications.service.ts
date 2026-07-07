@@ -9,7 +9,7 @@ import {
   notificationDeliveries,
   notificationSubscriptions,
 } from "../db/schema/index.js";
-import { assertPublicUrl } from "../lib/public-url.js";
+import { assertPublicUrl, assertPublicUrlResolved } from "../lib/public-url.js";
 import {
   emailContent,
   sendEmail,
@@ -212,7 +212,9 @@ async function deliver(
         }
       }
     } else {
-      assertPublicUrl(cfg.url); // re-check at send (rows may predate the guard)
+      // Re-check + RESOLVE at send: a hostname whose DNS now points at a private
+      // target (rebinding) is rejected before we dial it (S4).
+      await assertPublicUrlResolved(cfg.url);
       const res = await fetch(cfg.url, {
         method: "POST",
         headers: { "content-type": "application/json" },

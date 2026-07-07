@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { EmptyState } from "../components/empty-state";
+import { ErrorState } from "../components/error-state";
 import { Page } from "../components/page";
 import { SkeletonRows } from "../components/skeleton";
 import { StatusPill } from "../components/status-pill";
@@ -8,6 +9,7 @@ import { api } from "../lib/api";
 import { pageTitle } from "../lib/page-title";
 import { relativeTime } from "../lib/time";
 import { toast } from "../lib/toast";
+import { useResource } from "../lib/use-resource";
 
 // Managed-DB backups overview (R5.3): each config's schedule + next run + the
 // last run's status/size, the recent runs, and a run-now action. Read-mostly —
@@ -55,24 +57,15 @@ export function formatBytes(n: number | null): string {
 }
 
 export function Backups() {
-  const [configs, setConfigs] = useState<BackupConfig[] | null>(null);
-  const [note, setNote] = useState("");
+  const {
+    data: configs,
+    loading,
+    error,
+    reload,
+  } = useResource(() => api.get<BackupConfig[]>("/api/v1/backup-configs"));
   const [openRuns, setOpenRuns] = useState<Record<string, RunRow[] | "loading">>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
 
-  const load = useCallback(async () => {
-    const r = await api.get<BackupConfig[]>("/api/v1/backup-configs");
-    if (r.ok && Array.isArray(r.data)) {
-      setConfigs(r.data);
-      setNote("");
-    } else {
-      setConfigs([]);
-      setNote(`Backups API responded ${r.status}.`);
-    }
-  }, []);
-  useEffect(() => {
-    void load();
-  }, [load]);
   useEffect(() => {
     document.title = pageTitle("Backups");
   }, []);
@@ -87,7 +80,7 @@ export function Backups() {
     setBusy((b) => ({ ...b, [c.id]: false }));
     if (r.ok) {
       toast.success("Backup started");
-      setTimeout(() => void load(), 2500);
+      setTimeout(() => reload(), 2500);
     } else {
       toast.error(`Could not start backup (${r.status}).`);
     }
@@ -117,9 +110,11 @@ export function Backups() {
           <h2>Backup configs</h2>
         </div>
 
-        {configs === null ? (
+        {loading && !configs ? (
           <SkeletonRows count={3} />
-        ) : configs.length > 0 ? (
+        ) : error ? (
+          <ErrorState title="Couldn't load backups" message={error} onRetry={reload} />
+        ) : configs && configs.length > 0 ? (
           <ul className="backup-list">
             {configs.map((c) => {
               const runs = openRuns[c.id];
@@ -204,7 +199,7 @@ export function Backups() {
         ) : (
           <EmptyState
             title="No backup configs"
-            description={note || "Schedule database backups via the API or CLI; they'll show here."}
+            description="Schedule database backups via the API or CLI; they'll show here."
           />
         )}
       </section>

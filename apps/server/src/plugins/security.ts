@@ -7,11 +7,12 @@ import { corsOrigins } from "../lib/cors-origins.js";
 import { toProblem } from "../lib/problem.js";
 
 // helmet + cors + rate-limit. The in-process rate-limit store protects the
-// control plane; it does not cap tenants (platform "no artificial limits"). Tiers
-// (anon/session/api-key) are refined once auth lands (05); a generous default now.
-// CORS is allowlist-only: with cookie sessions, reflecting arbitrary
-// origins with credentials would hand the API to any page a victim visits.
-const DEFAULT_RATE_LIMIT = 1000;
+// control plane; it does not cap tenants (platform "no artificial limits"). The
+// credential-submitting /auth/* endpoints get a tighter per-IP tier on top of
+// this (see auth/rate-tier.ts, wired in auth/plugin.ts). CORS is allowlist-only:
+// with cookie sessions, reflecting arbitrary origins with credentials would hand
+// the API to any page a victim visits.
+export const DEFAULT_RATE_LIMIT = 1000;
 
 export const securityPlugin = fp(async (app) => {
   await app.register(helmet, { contentSecurityPolicy: false });

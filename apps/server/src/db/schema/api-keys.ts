@@ -17,6 +17,10 @@ export const apiKeys = pgTable(
     scopes: jsonb("scopes").$type<string[]>().notNull().default([]),
     createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    // Lifecycle (S3): expired/revoked keys stay listed for audit; the resolver
+    // rejects them. Revoke is the soft path — DELETE remains for cleanup.
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({ orgIdx: index("api_keys_org_idx").on(t.organizationId) }),

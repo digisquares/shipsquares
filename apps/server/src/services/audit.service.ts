@@ -4,6 +4,7 @@ import { desc, eq } from "drizzle-orm";
 import type { Db } from "../db/index.js";
 import { auditLog } from "../db/schema/index.js";
 import type { RequestContext } from "../lib/ctx.js";
+import { swallow } from "../lib/swallow.js";
 
 // Audit on every mutation (05-auth-rbac.md): instead of 30 per-route call
 // sites, one onResponse hook (plugins/audit.ts) maps each successful authed
@@ -94,8 +95,9 @@ export function dbStudioAuditEvent(
 export async function recordAudit(db: Db, event: AuditEvent): Promise<void> {
   try {
     await db.insert(auditLog).values({ id: newId("aud"), ...event });
-  } catch {
-    /* best-effort by design */
+  } catch (err) {
+    // best-effort by design, but a dropped audit row is compliance-relevant.
+    swallow(`audit.insert:${event.action}`, err, "error");
   }
 }
 

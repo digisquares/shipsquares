@@ -197,6 +197,27 @@
       "when": 1781777063500,
       "tag": "0027_watery_dreadnoughts",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1782976491183,
+      "tag": "0028_massive_earthquake",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1783099295968,
+      "tag": "0029_busy_wonder_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1783392831051,
+      "tag": "0030_romantic_mantis",
+      "breakpoints": true
     }
   ]
 }

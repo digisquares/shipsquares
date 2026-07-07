@@ -14,6 +14,22 @@ describe("isValidCron (5-field pg-boss cron)", () => {
       expect(isValidCron(bad), bad).toBe(false);
     }
   });
+
+  it("rejects out-of-range fields (would throw later in boss.schedule)", () => {
+    for (const bad of [
+      "70 * * * *", // minute > 59
+      "* 24 * * *", // hour > 23
+      "* * 32 * *", // day-of-month > 31
+      "* * 0 * *", // day-of-month < 1
+      "* * * 13 *", // month > 12
+      "* * * * 8-9", // day-of-week range out of 0-7
+      "*/0 * * * *", // zero step
+      "5-1 * * * *", // inverted range
+    ]) {
+      expect(isValidCron(bad), bad).toBe(false);
+    }
+    expect(isValidCron("* * * * 7")).toBe(true); // 7 == Sunday, valid
+  });
 });
 
 describe("nextCronRun (next UTC fire time)", () => {

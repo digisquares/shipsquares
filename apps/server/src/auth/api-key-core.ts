@@ -23,3 +23,14 @@ export function parseBearer(authorization: string | undefined): string | null {
   if (!scheme || scheme.toLowerCase() !== "bearer" || !value) return null;
   return TOKEN_RE.test(value) ? value : null;
 }
+
+/** Why a stored key must be refused (S3), or null when it's usable. Revocation
+ *  wins over expiry so a revoked key never "un-revokes" by also expiring. */
+export function apiKeyDenied(
+  key: { revokedAt: Date | null; expiresAt: Date | null },
+  now: Date = new Date(),
+): "revoked" | "expired" | null {
+  if (key.revokedAt) return "revoked";
+  if (key.expiresAt && key.expiresAt.getTime() <= now.getTime()) return "expired";
+  return null;
+}

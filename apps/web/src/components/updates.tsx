@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { confirm } from "../lib/confirm";
 import { toast } from "../lib/toast";
 
+import { ErrorState } from "./error-state";
 import { SkeletonRows } from "./skeleton";
 
 // Update notification UI (auto-update.md · Phases 1–2). Reads the singleton
@@ -54,7 +55,7 @@ export function UpdateBadge() {
   return (
     <a
       className="pill pill-info"
-      href="#/settings"
+      href="#/admin/updates"
       title={`Version ${state.latestVersion ?? ""} is available`}
     >
       Update available
@@ -188,7 +189,7 @@ export function UpdatesCard() {
       </div>
 
       {loadFailed ? (
-        <p className="muted">Couldn't load update status.</p>
+        <ErrorState title="Couldn't load update status" onRetry={() => void load()} />
       ) : !state ? (
         <SkeletonRows count={2} />
       ) : (

@@ -22,9 +22,25 @@ export const publicationName = (id: string): string => `ss_pub_${safeSuffix(id)}
 export const subscriptionName = (id: string): string => `ss_sub_${safeSuffix(id)}`;
 export const slotName = (id: string): string => `ss_slot_${safeSuffix(id)}`;
 
-/** libpq keyword/value conninfo for the primary (used inside CONNECTION '…'). */
+/** Quote one libpq conninfo value: always single-quote it, backslash-escaping
+ *  `\` and `'` inside. Without this a value containing a space, quote, or
+ *  `keyword=` would break conninfo parsing or inject params (the SQL-literal
+ *  escaping in createSubscriptionSql only guards the outer SQL layer, not libpq's
+ *  own tokenizer). */
+function libpqQuote(v: string | number): string {
+  return `'${String(v).replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+}
+
+/** libpq keyword/value conninfo for the primary (used inside CONNECTION '…').
+ *  Every value is libpq-quoted so arbitrary passwords/users are safe. */
 export function replicationConnString(t: ReplicaTarget): string {
-  return `host=${t.host} port=${t.port} user=${t.user} password=${t.password} dbname=${t.database}`;
+  return [
+    `host=${libpqQuote(t.host)}`,
+    `port=${libpqQuote(t.port)}`,
+    `user=${libpqQuote(t.user)}`,
+    `password=${libpqQuote(t.password)}`,
+    `dbname=${libpqQuote(t.database)}`,
+  ].join(" ");
 }
 
 export function createPublicationSql(replicaId: string): string {

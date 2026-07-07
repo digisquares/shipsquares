@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 
 import { CopyButton } from "../components/copy-button";
 import { EmptyState } from "../components/empty-state";
+import { ErrorState } from "../components/error-state";
+import { Field, Select, TextInput } from "../components/form";
 import { Page } from "../components/page";
 import { SkeletonRows } from "../components/skeleton";
 import { api } from "../lib/api";
@@ -12,6 +14,7 @@ import { ORG_ROLES, memberLabel, scopesLabel } from "../lib/org";
 import { pageTitle } from "../lib/page-title";
 import { relativeTime } from "../lib/time";
 import { toast } from "../lib/toast";
+import { useResource } from "../lib/use-resource";
 
 // The GitHub App install is a server route that 302s to GitHub (full navigation,
 // not hash routing). Auth rides the session cookie.
@@ -44,17 +47,12 @@ interface Member {
 }
 
 export function MembersCard() {
-  const [members, setMembers] = useState<Member[] | null>(null);
-  const [loadFailed, setLoadFailed] = useState(false);
-
-  const load = useCallback(async () => {
-    const r = await api.get<Member[]>("/api/v1/members");
-    setMembers(r.ok ? r.data : []);
-    setLoadFailed(!r.ok);
-  }, []);
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const {
+    data: members,
+    loading,
+    error,
+    reload,
+  } = useResource(() => api.get<Member[]>("/api/v1/members"));
 
   async function changeRole(m: Member, role: string) {
     const r = await api.patch<Member>(`/api/v1/members/${m.id}`, { role });
@@ -68,7 +66,7 @@ export function MembersCard() {
           : `Role change failed (${r.status})`,
       );
     }
-    await load(); // re-sync the select either way
+    reload(); // re-sync the select either way
   }
 
   async function remove(m: Member) {
@@ -81,7 +79,7 @@ export function MembersCard() {
     const r = await api.del(`/api/v1/members/${m.id}`);
     if (r.ok) {
       toast.success("Member removed");
-      await load();
+      reload();
     } else {
       toast.error(
         r.status === 409 || r.status === 400
@@ -101,16 +99,17 @@ export function MembersCard() {
         now, members join by signing up and being added by an admin.
       </p>
 
-      {members === null ? (
+      {loading && !members ? (
         <SkeletonRows count={2} />
-      ) : members.length > 0 ? (
+      ) : error ? (
+        <ErrorState title="Couldn't load members" message={error} onRetry={reload} />
+      ) : members && members.length > 0 ? (
         <ul className="app-list">
           {members.map((m) => (
             <li key={m.id} className="app-row">
               <span className="app-name">{memberLabel(m)}</span>
               <span className="app-id muted mono">{m.email ?? m.userId}</span>
-              <select
-                className="role-select"
+              <Select
                 aria-label={`Role for ${memberLabel(m)}`}
                 value={m.role}
                 onChange={(e) => void changeRole(m, e.target.value)}
@@ -120,7 +119,7 @@ export function MembersCard() {
                     {r}
                   </option>
                 ))}
-              </select>
+              </Select>
               <button
                 className="btn btn-ghost btn-sm"
                 aria-label={`Remove ${memberLabel(m)}`}
@@ -131,8 +130,6 @@ export function MembersCard() {
             </li>
           ))}
         </ul>
-      ) : loadFailed ? (
-        <p className="field-error">Couldn&apos;t load members — check the server and retry.</p>
       ) : (
         <EmptyState title="No members" description="You're the only one here so far." />
       )}
@@ -203,30 +200,23 @@ function InvitesPanel() {
         SMTP is configured, or copy it below).
       </p>
       <div className="form-row">
-        <label className="field">
-          <span className="field-label">Email</span>
-          <input
-            className="chat-input"
+        <Field label="Email">
+          <TextInput
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="teammate@example.com"
           />
-        </label>
+        </Field>
         <label className="field">
           <span className="field-label">Role</span>
-          <select
-            className="role-select"
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-            aria-label="Invite role"
-          >
+          <Select value={role} onChange={(e) => setRole(e.target.value)} aria-label="Invite role">
             {["admin", "deployer", "viewer"].map((r) => (
               <option key={r} value={r}>
                 {r}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <div className="card-actions key-create-action">
           <button
@@ -274,36 +264,52 @@ interface ApiKey {
   name: string;
   scopes: string[];
   lastUsedAt: string | null;
+  expiresAt: string | null;
+  revokedAt: string | null;
   createdAt: string;
 }
 
+// Revoked/expired keys stay listed (audit trail) — Revoke is the primary
+// action; Delete is offered only once a key is already inert.
+function keyStatus(k: ApiKey): "active" | "revoked" | "expired" {
+  if (k.revokedAt) return "revoked";
+  if (k.expiresAt && new Date(k.expiresAt).getTime() <= Date.now()) return "expired";
+  return "active";
+}
+
+const EXPIRY_CHOICES = [
+  { value: "", label: "Never expires" },
+  { value: "30", label: "Expires in 30 days" },
+  { value: "90", label: "Expires in 90 days" },
+  { value: "365", label: "Expires in 1 year" },
+];
+
 export function ApiKeysCard() {
-  const [keys, setKeys] = useState<ApiKey[] | null>(null);
-  const [loadFailed, setLoadFailed] = useState(false);
+  const {
+    data: keys,
+    loading,
+    error,
+    reload,
+  } = useResource(() => api.get<ApiKey[]>("/api/v1/api-keys"));
   const [name, setName] = useState("");
+  const [expiryDays, setExpiryDays] = useState("");
   const [creating, setCreating] = useState(false);
   const [minted, setMinted] = useState<{ name: string; token: string } | null>(null);
-
-  const load = useCallback(async () => {
-    const r = await api.get<ApiKey[]>("/api/v1/api-keys");
-    setKeys(r.ok ? r.data : []);
-    setLoadFailed(!r.ok);
-  }, []);
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   async function create() {
     if (!name.trim()) return;
     setCreating(true);
     const r = await api.post<{ key: ApiKey; token: string }>("/api/v1/api-keys", {
       name: name.trim(),
+      ...(expiryDays
+        ? { expiresAt: new Date(Date.now() + Number(expiryDays) * 86_400_000).toISOString() }
+        : {}),
     });
     setCreating(false);
     if (r.ok) {
       setMinted({ name: r.data.key.name, token: r.data.token });
       setName("");
-      await load();
+      reload();
     } else {
       toast.error(
         r.status === 403 ? "Creating keys needs an org admin" : `Create failed (${r.status})`,
@@ -311,10 +317,27 @@ export function ApiKeysCard() {
     }
   }
 
+  async function revoke(k: ApiKey) {
+    const ok = await confirm({
+      title: "Revoke API key?",
+      message: `"${k.name}" stops working immediately — CLI/MCP/CI using it will 401. The key stays listed for audit.`,
+      danger: true,
+    });
+    if (!ok) return;
+    const r = await api.post(`/api/v1/api-keys/${k.id}/revoke`, {});
+    if (r.ok) {
+      toast.success("API key revoked");
+      if (minted?.name === k.name) setMinted(null);
+      reload();
+    } else {
+      toast.error(`Revoke failed (${r.status})`);
+    }
+  }
+
   async function remove(k: ApiKey) {
     const ok = await confirm({
       title: "Delete API key?",
-      message: `"${k.name}" stops working immediately — CLI/MCP/CI using it will 401.`,
+      message: `Permanently remove "${k.name}" from the list.`,
       danger: true,
     });
     if (!ok) return;
@@ -322,7 +345,7 @@ export function ApiKeysCard() {
     if (r.ok) {
       toast.success("API key deleted");
       if (minted?.name === k.name) setMinted(null);
-      await load();
+      reload();
     } else {
       toast.error(`Delete failed (${r.status})`);
     }
@@ -339,16 +362,23 @@ export function ApiKeysCard() {
       </p>
 
       <div className="form-row">
-        <label className="field">
-          <span className="field-label">Key name</span>
-          <input
-            className="chat-input"
+        <Field label="Key name">
+          <TextInput
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="ci-deploys"
             maxLength={120}
           />
-        </label>
+        </Field>
+        <Field label="Expiry">
+          <Select value={expiryDays} onChange={(e) => setExpiryDays(e.target.value)}>
+            {EXPIRY_CHOICES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
         <div className="card-actions key-create-action">
           <button
             className="btn btn-primary btn-sm"
@@ -368,29 +398,50 @@ export function ApiKeysCard() {
         </div>
       )}
 
-      {keys === null ? (
+      {loading && !keys ? (
         <SkeletonRows count={2} />
-      ) : keys.length > 0 ? (
+      ) : error ? (
+        <ErrorState title="Couldn't load API keys" message={error} onRetry={reload} />
+      ) : keys && keys.length > 0 ? (
         <ul className="app-list">
-          {keys.map((k) => (
-            <li key={k.id} className="app-row">
-              <span className="app-name">{k.name}</span>
-              <span className="app-id muted mono">{scopesLabel(k.scopes)}</span>
-              <span className="app-id muted">
-                {k.lastUsedAt ? `used ${relativeTime(k.lastUsedAt)}` : "never used"}
-              </span>
-              <button
-                className="btn btn-ghost btn-sm"
-                aria-label={`Delete the ${k.name} key`}
-                onClick={() => void remove(k)}
-              >
-                Delete
-              </button>
-            </li>
-          ))}
+          {keys.map((k) => {
+            const status = keyStatus(k);
+            return (
+              <li key={k.id} className="app-row">
+                <span className="app-name">{k.name}</span>
+                <span className="app-id muted mono">{scopesLabel(k.scopes)}</span>
+                <span className="app-id muted">
+                  {status === "revoked"
+                    ? `revoked ${relativeTime(k.revokedAt!)}`
+                    : status === "expired"
+                      ? `expired ${relativeTime(k.expiresAt!)}`
+                      : k.expiresAt
+                        ? `expires ${relativeTime(k.expiresAt)}`
+                        : k.lastUsedAt
+                          ? `used ${relativeTime(k.lastUsedAt)}`
+                          : "never used"}
+                </span>
+                {status === "active" ? (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    aria-label={`Revoke the ${k.name} key`}
+                    onClick={() => void revoke(k)}
+                  >
+                    Revoke
+                  </button>
+                ) : (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    aria-label={`Delete the ${k.name} key`}
+                    onClick={() => void remove(k)}
+                  >
+                    Delete
+                  </button>
+                )}
+              </li>
+            );
+          })}
         </ul>
-      ) : loadFailed ? (
-        <p className="field-error">Couldn&apos;t load API keys — check the server and retry.</p>
       ) : (
         <EmptyState title="No API keys" description="Create one for the CLI or CI." />
       )}
@@ -484,26 +535,22 @@ export function AiSettingsCard() {
       </p>
 
       <div className="form-row">
-        <label className="field">
-          <span className="field-label">Claude API key</span>
-          <input
+        <Field label="Claude API key">
+          <TextInput
             type="password"
-            className="chat-input"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             placeholder={view?.configured ? "(unchanged)" : "sk-ant-…"}
             autoComplete="off"
           />
-        </label>
-        <label className="field">
-          <span className="field-label">Model</span>
-          <input
-            className="chat-input"
+        </Field>
+        <Field label="Model">
+          <TextInput
             value={model}
             onChange={(e) => setModel(e.target.value)}
             placeholder="claude-sonnet-4-6"
           />
-        </label>
+        </Field>
       </div>
       <label className="field">
         <span>
@@ -605,16 +652,14 @@ function TwoFactorCard() {
 
       {enabled ? (
         <div className="form-row">
-          <label className="field">
-            <span className="field-label">Confirm password to disable</span>
-            <input
+          <Field label="Confirm password to disable">
+            <TextInput
               type="password"
-              className="chat-input"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
             />
-          </label>
+          </Field>
           <div className="card-actions key-create-action">
             <button
               className="btn btn-ghost btn-sm"
@@ -664,16 +709,14 @@ function TwoFactorCard() {
         </div>
       ) : (
         <div className="form-row">
-          <label className="field">
-            <span className="field-label">Confirm password to enable</span>
-            <input
+          <Field label="Confirm password to enable">
+            <TextInput
               type="password"
-              className="chat-input"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
             />
-          </label>
+          </Field>
           <div className="card-actions key-create-action">
             <button
               className="btn btn-primary btn-sm"
@@ -690,17 +733,12 @@ function TwoFactorCard() {
 }
 
 export function VcsConnectionsCard() {
-  const [conns, setConns] = useState<VcsConnection[] | null>(null);
-  const [loadFailed, setLoadFailed] = useState(false);
-
-  const load = useCallback(async () => {
-    const r = await api.get<VcsConnection[]>("/api/v1/vcs-connections");
-    setConns(r.ok ? r.data : []);
-    setLoadFailed(!r.ok); // an outage must not masquerade as "no connections"
-  }, []);
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const {
+    data: conns,
+    loading,
+    error,
+    reload,
+  } = useResource(() => api.get<VcsConnection[]>("/api/v1/vcs-connections"));
 
   async function remove(c: VcsConnection) {
     const ok = await confirm({
@@ -712,7 +750,7 @@ export function VcsConnectionsCard() {
     const r = await api.del(`/api/v1/vcs-connections/${c.id}`);
     if (r.ok) {
       toast.success("Connection removed");
-      await load();
+      reload();
     } else {
       toast.error(`Remove failed (${r.status})`);
     }
@@ -728,9 +766,11 @@ export function VcsConnectionsCard() {
       </div>
       <p className="muted">Connect a provider so a push auto-deploys the matching app.</p>
 
-      {conns === null ? (
+      {loading && !conns ? (
         <SkeletonRows count={2} />
-      ) : conns.length > 0 ? (
+      ) : error ? (
+        <ErrorState title="Couldn't load connections" message={error} onRetry={reload} />
+      ) : conns && conns.length > 0 ? (
         <ul className="app-list">
           {conns.map((c) => (
             <li key={c.id} className="app-row">
@@ -748,8 +788,6 @@ export function VcsConnectionsCard() {
             </li>
           ))}
         </ul>
-      ) : loadFailed ? (
-        <p className="field-error">Couldn&apos;t load connections — check the server and retry.</p>
       ) : (
         <EmptyState
           title="No git connections"

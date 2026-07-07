@@ -7,11 +7,27 @@ import { shq } from "../backups/commands.js";
 
 const CRON_FIELD = /^[\d*,/-]+$/;
 
-/** 5-field cron (pg-boss). Numeric fields with * , - / — no month/day names. */
+// Per-field value ranges: minute, hour, day-of-month, month, day-of-week (0/7=Sun).
+const CRON_RANGES: readonly [number, number][] = [
+  [0, 59],
+  [0, 23],
+  [1, 31],
+  [1, 12],
+  [0, 7],
+];
+
+/** 5-field cron (pg-boss). Numeric fields with * , - / — no month/day names.
+ *  Range-checked per field so an out-of-range expr like `70 * * * *` is rejected
+ *  at create time instead of throwing later inside `boss.schedule` (which would
+ *  otherwise abort boot-time re-registration of the remaining schedules). */
 export function isValidCron(expr: string): boolean {
   const fields = expr.trim().split(/\s+/);
   if (fields.length !== 5) return false;
-  return fields.every((f) => f.length > 0 && CRON_FIELD.test(f));
+  return fields.every((f, i) => {
+    if (f.length === 0 || !CRON_FIELD.test(f)) return false;
+    const [min, max] = CRON_RANGES[i]!;
+    return cronField(f, min, max) !== null;
+  });
 }
 
 /** One pg-boss queue per schedule so cron registration is individually addressable. */

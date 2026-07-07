@@ -14,8 +14,17 @@ export interface StatementAnalysis {
 }
 
 /** Replace comment + string/identifier-literal contents with spaces so keyword
- *  scanning only sees real SQL. Handles --, block comments, '…'/"…"/`…` with
- *  doubled-quote and backslash escapes. */
+ *  scanning only sees real SQL. Handles --, block comments, and '…'/"…"/`…`
+ *  closed by a matching quote, with doubled-quote escaping (`''`).
+ *
+ *  Backslash is deliberately NOT treated as a string escape: Postgres with the
+ *  default `standard_conforming_strings=on` does not honour it, so treating `\'`
+ *  as an escape made the scanner run past a string's real end and swallow the
+ *  rest of a multi-statement batch — e.g. `select '\';drop table t--'` looked
+ *  like one read statement (a viewer→arbitrary-DDL bypass). Closing at the first
+ *  matching quote errs toward *seeing more* statements, the safe direction for a
+ *  read-only boundary (MySQL backslash-escapes may over-count, which only
+ *  over-denies — never under-classifies a write as a read). */
 export function stripNoise(sql: string): string {
   let out = "";
   let i = 0;
@@ -40,10 +49,6 @@ export function stripNoise(sql: string): string {
       const q = c;
       i += 1;
       while (i < n) {
-        if (sql[i] === "\\" && q !== "`") {
-          i += 2;
-          continue;
-        }
         if (sql[i] === q) {
           if (sql[i + 1] === q) {
             i += 2;
@@ -107,13 +112,46 @@ function firstKeyword(stmt: string): string {
   return m ? m[1]!.toLowerCase() : "";
 }
 
-function classifyOne(stmt: string): {
-  cls: StatementClass;
-  destructive: boolean;
-  missingWhere: boolean;
-} {
+type OneClass = { cls: StatementClass; destructive: boolean; missingWhere: boolean };
+
+const READ_ONE: OneClass = { cls: "read", destructive: false, missingWhere: false };
+
+/** EXPLAIN is a read ONLY when it just plans. `EXPLAIN ANALYZE <write>` (and the
+ *  parenthesised `EXPLAIN (ANALYZE) <write>`) actually EXECUTES the inner
+ *  statement in Postgres, so it must inherit the inner statement's class — else a
+ *  viewer runs writes/DDL under a "read". We unwrap the EXPLAIN prefix, note
+ *  whether ANALYZE is present, then classify the inner statement; a plain
+ *  (non-analyze) EXPLAIN of a write stays a read (planning only). */
+function classifyExplain(stmt: string): OneClass {
+  const m = /^\s*explain\s+/i.exec(stmt);
+  if (!m) return READ_ONE;
+  let rest = stmt.slice(m[0].length);
+  let analyze = false;
+  if (rest.startsWith("(")) {
+    const close = rest.indexOf(")");
+    if (close === -1) return READ_ONE; // malformed → planning-only read
+    if (/\banalyze\b/i.test(rest.slice(1, close))) analyze = true;
+    rest = rest.slice(close + 1).trimStart();
+  } else {
+    // Legacy bare form: EXPLAIN [ANALYZE] [VERBOSE] <statement>
+    let opt: RegExpExecArray | null;
+    const OPT = /^(analyze|verbose)\b\s*/i;
+    while ((opt = OPT.exec(rest))) {
+      if (/analyze/i.test(opt[1]!)) analyze = true;
+      rest = rest.slice(opt[0].length);
+    }
+  }
+  const inner = classifyOne(rest);
+  if (inner.cls === "read") return READ_ONE;
+  if (inner.cls === "unknown") return inner; // conservative: deny on read-only
+  // A write/ddl inner executes only under ANALYZE; otherwise it's planning-only.
+  return analyze ? inner : READ_ONE;
+}
+
+function classifyOne(stmt: string): OneClass {
   const kw = firstKeyword(stmt);
   const lower = stmt.toLowerCase();
+  if (kw === "explain") return classifyExplain(stmt);
   let cls: StatementClass;
   if (READ_KW.has(kw)) {
     // A data-modifying CTE (WITH … INSERT/UPDATE/DELETE) is a write.

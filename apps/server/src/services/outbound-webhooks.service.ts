@@ -9,7 +9,8 @@ import {
   outboundWebhookDeliveries,
   outboundWebhooks,
 } from "../db/schema/index.js";
-import { assertPublicUrl } from "../lib/public-url.js";
+import { assertPublicUrl, assertPublicUrlResolved } from "../lib/public-url.js";
+import { swallow } from "../lib/swallow.js";
 import { loadMasterKey, open, seal } from "../secrets/crypto.js";
 import type { SealedValue } from "../secrets/types.js";
 import { PLATFORM_EVENTS, buildOutboundDelivery, matchesEvent } from "../webhooks/outbound.js";
@@ -173,7 +174,10 @@ export async function dispatchOutbound(
     let httpStatus: number | null = null;
     let error: string | undefined;
     try {
-      assertPublicUrl(hook.url); // re-checked at send: DNS may have moved
+      // Re-check + RESOLVE at send: reject a host that now resolves to a private
+      // target (DNS rebinding) before dialling it (S4). `redirect: "error"` below
+      // stops a 3xx from re-pointing the delivery.
+      await assertPublicUrlResolved(hook.url);
       const secret = hook.secret ? openStr(hook.secret, config) : null;
       const delivery = buildOutboundDelivery(event, data, { deliveryId, secret });
       const res = await fetch(hook.url, {
@@ -202,7 +206,7 @@ export async function dispatchOutbound(
         httpStatus,
         ...(error ? { error } : {}),
       })
-      .catch(() => undefined);
+      .catch((e) => swallow("webhook.delivery_log", e));
   }
 }
 

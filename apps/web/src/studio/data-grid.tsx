@@ -11,6 +11,15 @@ import { rowKeyOf } from "./types";
 // the rownum cell becomes a row-delete toggle. Changes bubble up as pending
 // edits/deletes (shown dirty / struck) — nothing is sent until the commit bar.
 
+// Editable text for a cell value. json/jsonb/array cells must serialize with
+// JSON.stringify — `String(obj)` yields "[object Object]", which the user would
+// then unknowingly commit as a literal string (mirrors renderValue's display).
+export function cellText(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
 function renderValue(value: unknown) {
   if (value === null || value === undefined) return <span className="cell-null">null</span>;
   if (typeof value === "object") return <span className="cell-json">{JSON.stringify(value)}</span>;
@@ -34,7 +43,7 @@ export function EditableCell({
           className="cell-input"
           aria-label="cell value"
           autoFocus
-          defaultValue={value === null || value === undefined ? "" : String(value)}
+          defaultValue={cellText(value)}
           onBlur={(e) => {
             setEditing(false);
             onCommit(e.target.value);

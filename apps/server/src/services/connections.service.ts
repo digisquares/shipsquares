@@ -1,4 +1,4 @@
-import { newId, NotFoundError } from "@ss/shared";
+import { ConflictError, newId, NotFoundError } from "@ss/shared";
 import { and, asc, desc, eq } from "drizzle-orm";
 
 import type { Db } from "../db/index.js";
@@ -115,12 +115,33 @@ export interface GithubAppConnectionInput {
 /** Idempotent install-callback persistence: one connection per
  *  (org, installation) — a re-install / replayed callback UPDATES the existing
  *  row instead of inserting a duplicate. The partial unique index
- *  `vcs_connections_org_installation` backstops the find-then-insert race. */
+ *  `vcs_connections_org_installation` backstops the find-then-insert race.
+ *
+ *  Cross-org (S11): the installation id is client-supplied in the install
+ *  callback and enumerable, so binding one that a DIFFERENT org already
+ *  connected for the same App would hand this org installation-token clone
+ *  access to that org's private repos. First bind wins (ConflictError);
+ *  `vcs_connections_app_installation` closes the concurrent-callback race. */
 export async function upsertGithubAppConnection(
   db: Db,
   orgId: string,
   input: GithubAppConnectionInput,
 ): Promise<VcsConnectionView> {
+  const boundElsewhere = new ConflictError(
+    "this GitHub App installation is already connected to another organization",
+  );
+  const bound = await db
+    .select({ organizationId: vcsConnections.organizationId })
+    .from(vcsConnections)
+    .where(
+      and(
+        eq(vcsConnections.githubAppId, input.githubAppId),
+        eq(vcsConnections.installationId, input.installationId),
+      ),
+    )
+    .limit(1);
+  if (bound[0] && bound[0].organizationId !== orgId) throw boundElsewhere;
+
   const update = async (): Promise<VcsConnectionView | null> => {
     const rows = await db
       .update(vcsConnections)
@@ -160,8 +181,11 @@ export async function upsertGithubAppConnection(
     return toView(rows[0]!);
   } catch (err) {
     if (isUniqueViolation(err)) {
-      const raced = await update(); // lost the race — the row exists now
+      const raced = await update(); // lost the same-org race — the row exists now
       if (raced) return raced;
+      // No same-org row, so the violation came from the cross-org app+installation
+      // index: another org bound this installation between our check and the insert.
+      throw boundElsewhere;
     }
     throw err;
   }

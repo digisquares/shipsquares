@@ -1,0 +1,1 @@
+CREATE INDEX "deployments_app_status_finished_idx" ON "deployments" USING btree ("app_id","status","finished_at");
